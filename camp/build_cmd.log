@@ -1,0 +1,21 @@
+
+> campconnect@0.0.0 build
+> tsc -b && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 26 modules transformed.
+[31mx[39m Build failed in 1.18s
+[31merror during build:
+[31m[vite]: Rollup failed to resolve import "figma:asset/e04d78a89e8d50c334329195c5c5145e0a9d778d.png" from "C:/Users/vongo/Documents/CampConnect/camp/src/app/components/Navbar.tsx".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`[31m
+    at viteWarn (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65855:17)
+    at onwarn (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/@vitejs/plugin-react/dist/index.js:90:7)
+    at onRollupWarning (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65885:5)
+    at onwarn (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65550:7)
+    at file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/rollup/dist/es/shared/node-entry.js:21046:13
+    at Object.logger [as onLog] (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/rollup/dist/es/shared/node-entry.js:22919:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/rollup/dist/es/shared/node-entry.js:21663:26)
+    at file:///C:/Users/vongo/Documents/CampConnect/camp/node_modules/rollup/dist/es/shared/node-entry.js:21621:26[39m
