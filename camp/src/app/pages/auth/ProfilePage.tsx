@@ -7,6 +7,7 @@ import { Separator } from "../../components/ui/separator";
 import { MapPin, Calendar, Globe, Camera, Edit, MoreHorizontal, Image as ImageIcon, Smile, User, UserPlus, UserCheck } from "lucide-react";
 import { PostCard, Post } from "../../components/ui/PostCard";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
+import { UserListDialog } from "../../components/UserListDialog";
 
 interface UserProfile {
     id: number;
@@ -24,6 +25,10 @@ export default function ProfilePage() {
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Dialog State
+    const [showFollowers, setShowFollowers] = useState(false);
+    const [showFollowing, setShowFollowing] = useState(false);
+
     // Current Auth User
     const userStr = localStorage.getItem('user');
     const currentUser = userStr ? JSON.parse(userStr) : null;
@@ -31,6 +36,20 @@ export default function ProfilePage() {
     // Determine target user ID (URL param or current user)
     const targetUserId = id ? parseInt(id) : (currentUser ? currentUser.id : 0);
     const isOwner = currentUser && currentUser.id === targetUserId;
+
+    const fetchData = async () => {
+        // Don't set global loading here to avoid full page flicker on silent updates
+        try {
+            // 1. Fetch User Details
+            const userRes = await fetch(`http://localhost:3000/api/users/${targetUserId}?currentUserId=${currentUser?.id}`);
+            if (userRes.ok) {
+                const userData = await userRes.json();
+                setProfileUser(userData);
+            }
+        } catch (error) {
+            console.error("Error refreshing profile data:", error);
+        }
+    };
 
     useEffect(() => {
         console.log("ProfilePage Effect: targetUserId", targetUserId);
@@ -40,32 +59,22 @@ export default function ProfilePage() {
             return;
         }
 
-        const fetchData = async () => {
+        const loadAll = async () => {
             setLoading(true);
+            await fetchData(); // Basic info
+            // 2. Fetch User Posts (only needs to happen once or separately)
             try {
-                console.log("Fetching data for user:", targetUserId);
-                // 1. Fetch User Details
-                const userRes = await fetch(`http://localhost:3000/api/users/${targetUserId}?currentUserId=${currentUser?.id}`);
-                if (userRes.ok) {
-                    const userData = await userRes.json();
-                    setProfileUser(userData);
-                } else {
-                    console.error("Error fetching user details:", await userRes.text());
-                }
-
-                // 2. Fetch User Posts
                 const postsRes = await fetch(`http://localhost:3000/api/posts?userId=${targetUserId}`);
                 const postsData = await postsRes.json();
                 setPosts(postsData);
-
-            } catch (error) {
-                console.error("Error fetching profile data:", error);
+            } catch (e) {
+                console.error("Error fetching posts:", e);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
+        loadAll();
     }, [targetUserId, currentUser?.id]);
 
     const handleFollowToggle = async () => {
@@ -143,14 +152,42 @@ export default function ProfilePage() {
                             {/* Name & Quick Actions */}
                             <div className="flex-1 mt-2 md:mt-0 md:mb-4">
                                 <h1 className="text-3xl font-bold text-gray-900">{profileUser.name}</h1>
-                                <p className="text-gray-600 font-medium capitalize">
-                                    {profileUser.profile_type} • {profileUser.followersCount} seguidores • {profileUser.followingCount} seguidos
-                                </p>
+
+                                <div className="flex items-center gap-4 text-gray-600 font-medium mt-1">
+                                    <span className="capitalize">{profileUser.profile_type}</span>
+                                    <span>•</span>
+                                    <button onClick={() => setShowFollowers(true)} className="hover:underline cursor-pointer hover:text-green-700">
+                                        <strong>{profileUser.followersCount}</strong> seguidores
+                                    </button>
+                                    <span>•</span>
+                                    <button onClick={() => setShowFollowing(true)} className="hover:underline cursor-pointer hover:text-green-700">
+                                        <strong>{profileUser.followingCount}</strong> seguidos
+                                    </button>
+                                </div>
+
                                 {/* Avatar Group Mockup (Friends/Connections) */}
                                 <div className="flex -space-x-2 mt-2">
                                     {/* Placeholder avatars could go here */}
                                 </div>
                             </div>
+
+                            {/* USER LIST DIALOGS */}
+                            <UserListDialog
+                                isOpen={showFollowers}
+                                onClose={() => setShowFollowers(false)}
+                                userId={profileUser.id}
+                                type="followers"
+                                title="Seguidores"
+                                onFollowChange={fetchData}
+                            />
+                            <UserListDialog
+                                isOpen={showFollowing}
+                                onClose={() => setShowFollowing(false)}
+                                userId={profileUser.id}
+                                type="following"
+                                title="Seguidos"
+                                onFollowChange={fetchData}
+                            />
 
                             {/* Action Buttons */}
                             <div className="flex items-center gap-3 mt-4 md:mt-0 md:mb-6 w-full md:w-auto">

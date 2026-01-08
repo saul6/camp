@@ -448,6 +448,113 @@ app.get('/api/users/:id', async (req, res) => {
     }
 });
 
+// 15. GET USER FOLLOWERS
+app.get('/api/users/:id/followers', async (req, res) => {
+    const targetUserId = req.params.id;
+    const currentUserId = req.query.currentUserId;
+
+    try {
+        const query = `
+            SELECT u.id, u.name, u.email, u.profile_type,
+            (SELECT 1 FROM connections WHERE follower_id = ? AND following_id = u.id) as isFollowing
+            FROM connections c
+            JOIN users u ON c.follower_id = u.id
+            WHERE c.following_id = ?
+        `;
+        const [rows] = await pool.query(query, [currentUserId || 0, targetUserId]);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting followers:', error);
+        res.status(500).json({ message: 'Error obteniendo seguidores' });
+    }
+});
+
+// 16. GET USER FOLLOWING
+app.get('/api/users/:id/following', async (req, res) => {
+    const targetUserId = req.params.id;
+    const currentUserId = req.query.currentUserId;
+
+    try {
+        const query = `
+            SELECT u.id, u.name, u.email, u.profile_type,
+            (SELECT 1 FROM connections WHERE follower_id = ? AND following_id = u.id) as isFollowing
+            FROM connections c
+            JOIN users u ON c.following_id = u.id
+            WHERE c.follower_id = ?
+        `;
+        const [rows] = await pool.query(query, [currentUserId || 0, targetUserId]);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting following:', error);
+        res.status(500).json({ message: 'Error obteniendo seguidos' });
+    }
+});
+
+// 17. GLOBAL SEARCH (Users & Posts)
+app.get('/api/search', async (req, res) => {
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+        return res.json({ users: [], posts: [] });
+    }
+
+    // console.log(`Searching for: ${q}`);
+
+    try {
+        const terms = q.trim().split(/\s+/);
+
+        // Build Users Query ensuring all terms are checked against name/email
+        // Using "OR" between terms to be permissive (match ANY word)
+        const userConditions = terms.map(() => `(name LIKE ? OR email LIKE ?)`).join(' AND ');
+        const userParams = [];
+        terms.forEach(term => {
+            userParams.push(`%${term}%`, `%${term}%`);
+        });
+
+        // Try strict AND first, if no results, maybe we could try OR? 
+        // For now, let's stick to permissive OR for broader results or strict AND?
+        // "Saul Luviano" -> saulluvianos. 'Saul' matches, 'Luviano' might not.
+        // If I use AND, "Saul Luviano" will fail against "saulluvianos" if Luviano is not in it.
+        // Let's use OR for maximum discoverability, or modify the split to key off keywords.
+
+        // BETTER APPROACH for "Saul Luviano" vs "saulluvianos":
+        // just search for the whole string first, then individual words.
+        // But simpler: just OR the terms.
+
+        const permissiveUserConditions = terms.map(() => `(name LIKE ? OR email LIKE ?)`).join(' OR ');
+        const permissiveParams = [];
+        terms.forEach(term => {
+            permissiveParams.push(`%${term}%`, `%${term}%`);
+        });
+
+        const [users] = await pool.query(
+            `SELECT id, name, email, profile_type FROM users WHERE ${permissiveUserConditions} LIMIT 5`,
+            permissiveParams
+        );
+
+        // Search Posts (JOIN with users to search by author name correctly if needed, or just select name)
+        // Adjusting query to join users to get author_name and filter by it
+        const permissivePostConditions = terms.map(() => `(p.content LIKE ? OR u.name LIKE ?)`).join(' OR ');
+        const permissivePostParams = [];
+        terms.forEach(term => {
+            permissivePostParams.push(`%${term}%`, `%${term}%`);
+        });
+
+        const [posts] = await pool.query(
+            `SELECT p.id, p.content, u.name as author_name, p.created_at, p.user_id 
+             FROM posts p 
+             JOIN users u ON p.user_id = u.id 
+             WHERE ${permissivePostConditions} 
+             LIMIT 5`,
+            permissivePostParams
+        );
+
+        res.json({ users, posts });
+    } catch (error) {
+        console.error('Error searching:', error);
+        res.status(500).json({ message: 'Error en búsqueda' });
+    }
+});
+
 // Basic Route
 app.get('/', (req, res) => {
     res.send('API de AgroCore funcionando 🚀');
