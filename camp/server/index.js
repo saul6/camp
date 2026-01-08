@@ -3,9 +3,12 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_change_me';
 
@@ -24,6 +27,55 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// --- SOCKET.IO SETUP ---
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Allow all for dev
+        methods: ["GET", "POST"]
+    }
+});
+
+io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    // Join user room for private notifications
+    socket.on('join_user', (userId) => {
+        if (userId) {
+            socket.join(`user_${userId}`);
+            console.log(`Socket ${socket.id} joined user_${userId}`);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
+});
+
+// Helper to send notification
+async function sendNotification(userId, actorId, type, referenceId) {
+    if (userId == actorId) return; // Don't notify self
+
+    try {
+        // 1. Save to DB
+        await pool.query(
+            'INSERT INTO notifications (user_id, actor_id, type, reference_id) VALUES (?, ?, ?, ?)',
+            [userId, actorId, type, referenceId]
+        );
+
+        // 2. Emit to Socket Room
+        io.to(`user_${userId}`).emit('new_notification', {
+            type,
+            actorId,
+            referenceId,
+            createdAt: new Date()
+        });
+        console.log(`Notification sent to user_${userId}`);
+
+    } catch (error) {
+        console.error('Error sending notification:', error);
+    }
+}
 
 // --- ROUTES ---
 
@@ -209,6 +261,14 @@ app.post('/api/posts/:id/like', async (req, res) => {
         } else {
             // Like
             await pool.query('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', [userId, postId]);
+
+            // NOTIFICATION
+            // Get post owner
+            const [post] = await pool.query('SELECT user_id FROM posts WHERE id = ?', [postId]);
+            if (post.length > 0) {
+                sendNotification(post[0].user_id, userId, 'like', postId);
+            }
+
             return res.json({ message: 'Post likeado', liked: true });
         }
     } catch (error) {
@@ -229,6 +289,14 @@ app.post('/api/posts/:id/comments', async (req, res) => {
             'INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)',
             [userId, postId, content]
         );
+
+        // NOTIFICATION
+        // Get post owner
+        const [post] = await pool.query('SELECT user_id FROM posts WHERE id = ?', [postId]);
+        if (post.length > 0) {
+            sendNotification(post[0].user_id, userId, 'comment', postId);
+        }
+
         res.status(201).json({ message: 'Comentario agregado', commentId: result.insertId });
     } catch (error) {
         console.error('Error adding comment:', error);
@@ -298,6 +366,10 @@ app.post('/api/users/:id/follow', async (req, res) => {
             'INSERT IGNORE INTO connections (follower_id, following_id) VALUES (?, ?)',
             [followerId, followingId]
         );
+
+        // NOTIFICATION
+        sendNotification(followingId, followerId, 'follow', followerId);
+
         res.json({ message: 'Usuario seguido' });
     } catch (error) {
         console.error('Error following user:', error);
@@ -308,11 +380,7 @@ app.post('/api/users/:id/follow', async (req, res) => {
 // 12. UNFOLLOW USER
 app.delete('/api/users/:id/follow', async (req, res) => {
     const followingId = req.params.id;
-    const { followerId } = req.body; // Use body or query for delete? Express DELETE supports body but standard is confusing. Let's assume body for JSON consistency or query.
-    // Actually safer to pass followerId in body for auth context (eventually from token)
-
-    // NOTE: For DELETE requests, some clients don't send body. Using query param might be safer if body fails. 
-    // Let's check req.body first, fallback to req.query
+    const { followerId } = req.body;
     const finalFollowerId = followerId || req.query.followerId;
 
     try {
@@ -327,13 +395,33 @@ app.delete('/api/users/:id/follow', async (req, res) => {
     }
 });
 
+// 13. GET NOTIFICATIONS
+app.get('/api/notifications', async (req, res) => {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ message: 'Falta userId' });
+
+    try {
+        const [rows] = await pool.query(`
+            SELECT n.*, u.name as actor_name, u.email as actor_email
+            FROM notifications n
+            JOIN users u ON n.actor_id = u.id
+            WHERE n.user_id = ?
+            ORDER BY n.created_at DESC
+            LIMIT 50
+        `, [userId]);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting notifications:', error);
+        res.status(500).json({ message: 'Error obteniendo notificaciones' });
+    }
+});
+
 // Basic Route
 app.get('/', (req, res) => {
     res.send('API de AgroCore funcionando 🚀');
 });
 
 // Start Server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
-

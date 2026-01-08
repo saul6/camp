@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Bell, Menu, MessageSquare, Search, LogOut, User, Settings as SettingsIcon } from "lucide-react";
+import { useSocket } from "../context/SocketContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -20,6 +21,7 @@ interface NavbarProps {
 
 export function Navbar({ onMenuClick }: NavbarProps) {
   const navigate = useNavigate();
+  const { unreadCount } = useSocket();
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -94,7 +96,9 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             </Button>
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
+              )}
             </Button>
 
             <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
