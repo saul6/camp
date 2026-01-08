@@ -6,8 +6,8 @@ export function AuthLayout() {
             <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
                 <div className="flex justify-center mb-8">
                     <div className="flex items-center gap-2">
-                        <img src="/logo_new.png" alt="AgroLink" className="h-20 w-auto" />
-                        <span className="text-2xl font-bold text-gray-900">AgroLink</span>
+                        <img src="/logo_new.png" alt="AgroCore" className="h-20 w-auto" />
+                        <span className="text-2xl font-bold text-gray-900">AgroCore</span>
                     </div>
                 </div>
                 <Outlet />

@@ -1,14 +1,33 @@
+import { useState, useEffect } from "react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
-// import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Separator } from "../../components/ui/separator";
-import { MapPin, Calendar, Globe, Camera, Edit, MoreHorizontal, Image as ImageIcon, ThumbsUp, MessageCircle, Share2 } from "lucide-react";
+import { MapPin, Calendar, Globe, Camera, Edit, MoreHorizontal, Image as ImageIcon, Smile, User } from "lucide-react";
+import { PostCard, Post } from "../../components/ui/PostCard";
+import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 
 export default function ProfilePage() {
+    const [posts, setPosts] = useState<Post[]>([]);
+
+    // Auth User
     const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : { name: "Usuario", profileType: "Agricultor" };
+    const user = userStr ? JSON.parse(userStr) : { id: 0, name: "Usuario", profileType: "Agricultor" };
     const initials = user.name ? user.name.substring(0, 2).toUpperCase() : "US";
+
+    useEffect(() => {
+        if (!user.id) return;
+        const fetchUserPosts = async () => {
+            try {
+                const response = await fetch(`http://localhost:3000/api/posts?userId=${user.id}`);
+                const data = await response.json();
+                setPosts(data);
+            } catch (error) {
+                console.error("Error fetching user posts:", error);
+            }
+        };
+        fetchUserPosts();
+    }, [user.id]);
 
     return (
         <div className="min-h-screen bg-gray-100 pb-10">
@@ -19,7 +38,7 @@ export default function ProfilePage() {
                     <div className="relative h-64 md:h-80 w-full rounded-b-xl overflow-hidden bg-gradient-to-r from-green-600 to-emerald-800">
                         {/* Placeholder for actual cover image */}
                         <div className="absolute inset-0 flex items-center justify-center text-white/30 font-bold text-4xl select-none">
-                            AgroLink Layout
+                            AgroCore
                         </div>
                         <Button variant="secondary" size="sm" className="absolute bottom-4 right-4 gap-2">
                             <Camera className="h-4 w-4" />
@@ -34,8 +53,9 @@ export default function ProfilePage() {
                             {/* Profile Picture */}
                             <div className="relative">
                                 <div className="h-40 w-40 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg flex items-center justify-center">
-                                    <span className="text-4xl font-bold text-gray-400">{initials}</span>
-                                    {/* <img src="/path-to-avatar.jpg" alt="Profile" className="h-full w-full object-cover" /> */}
+                                    <Avatar className="h-full w-full">
+                                        <AvatarFallback className="text-4xl">{initials}</AvatarFallback>
+                                    </Avatar>
                                 </div>
                                 <button className="absolute bottom-2 right-2 bg-gray-100 p-2 rounded-full hover:bg-gray-200 transition-colors border border-gray-300">
                                     <Camera className="h-5 w-5 text-gray-700" />
@@ -146,10 +166,10 @@ export default function ProfilePage() {
                             <CardContent className="pt-6">
                                 <div className="flex gap-3 mb-4">
                                     <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold shrink-0">
-                                        JP
+                                        {initials}
                                     </div>
                                     <Input
-                                        placeholder="¿Qué estás pensando, Juan?"
+                                        placeholder={`¿Qué estás pensando, ${user.name.split(' ')[0]}?`}
                                         className="bg-gray-100 border-none rounded-full px-4 hover:bg-gray-200 transition-colors cursor-pointer"
                                     />
                                 </div>
@@ -180,23 +200,16 @@ export default function ProfilePage() {
                             </div>
                         </Card>
 
-                        {/* Sample Post 1 */}
-                        <PostCard
-                            author="Juan Pérez"
-                            time="8 de abril de 2024"
-                            content="¡Excelente cosecha de aguacate este año! Listos para exportación. 🥑🌱 #AgroLink #Cosecha2024"
-                            likes={45}
-                            comments={12}
-                        />
-
-                        {/* Sample Post 2 */}
-                        <PostCard
-                            author="Juan Pérez"
-                            time="5 de abril de 2024"
-                            content="Preparando el terreno para la próxima siembra de berries. La tecnología de riego que implementamos está dando resultados increíbles."
-                            likes={32}
-                            comments={8}
-                        />
+                        {/* Posts */}
+                        {posts.length > 0 ? (
+                            posts.map((post) => (
+                                <PostCard key={post.id} post={post} currentUserId={user.id} />
+                            ))
+                        ) : (
+                            <div className="text-center py-10 bg-white rounded-lg shadow">
+                                <p className="text-gray-500">No has publicado nada aún.</p>
+                            </div>
+                        )}
 
                     </div>
                 </div>
@@ -205,66 +218,3 @@ export default function ProfilePage() {
     );
 }
 
-// Helper icons
-import { Smile, User } from "lucide-react";
-
-// Helper Component for Posts
-function PostCard({ author, time, content, likes, comments }: { author: string, time: string, content: string, likes: number, comments: number }) {
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-start gap-3 pb-2">
-                <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold cursor-pointer">
-                    JP
-                </div>
-                <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 cursor-pointer hover:underline">{author}</h3>
-                    <div className="flex items-center text-gray-500 text-sm gap-1">
-                        <span>{time}</span>
-                        <span>•</span>
-                        <Globe className="h-3 w-3" />
-                    </div>
-                </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-600">
-                    <MoreHorizontal className="h-5 w-5" />
-                </Button>
-            </CardHeader>
-            <CardContent className="pb-2">
-                <p className="text-gray-900 mb-4 whitespace-pre-line">{content}</p>
-                {/* Placeholder for post image */}
-                <div className="w-full h-64 md:h-96 bg-gray-200 rounded-lg mb-4 flex items-center justify-center text-gray-400">
-                    <ImageIcon className="h-12 w-12" />
-                </div>
-
-                <div className="flex items-center justify-between text-gray-500 text-sm mb-4">
-                    <div className="flex items-center gap-1">
-                        <div className="h-5 w-5 bg-blue-500 rounded-full flex items-center justify-center">
-                            <ThumbsUp className="h-3 w-3 text-white fill-white" />
-                        </div>
-                        <span>{likes}</span>
-                    </div>
-                    <div className="flex gap-4">
-                        <span>{comments} comentarios</span>
-                        <span>3 compartidos</span>
-                    </div>
-                </div>
-
-                <Separator className="mb-2" />
-
-                <div className="flex justify-between gap-2">
-                    <Button variant="ghost" className="flex-1 gap-2 text-gray-600 hover:bg-gray-100">
-                        <ThumbsUp className="h-5 w-5" />
-                        <span className="font-semibold">Me gusta</span>
-                    </Button>
-                    <Button variant="ghost" className="flex-1 gap-2 text-gray-600 hover:bg-gray-100">
-                        <MessageCircle className="h-5 w-5" />
-                        <span className="font-semibold">Comentar</span>
-                    </Button>
-                    <Button variant="ghost" className="flex-1 gap-2 text-gray-600 hover:bg-gray-100">
-                        <Share2 className="h-5 w-5" />
-                        <span className="font-semibold">Compartir</span>
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
