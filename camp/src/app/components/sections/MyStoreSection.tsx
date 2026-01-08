@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import * as z from "zod";
 import { Upload, Store } from "lucide-react";
 import { Button } from "../ui/button";
@@ -46,11 +47,46 @@ export function MyStoreSection() {
         },
     });
 
-    function onSubmit(values: z.infer<typeof productSchema>) {
-        console.log("Producto a publicar:", values);
-        alert("¡Producto publicado exitosamente!");
-        form.reset();
-    }
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+    const onSubmit = async (data: z.infer<typeof productSchema>) => {
+        setIsSubmitting(true);
+        try {
+            const userStr = localStorage.getItem('user');
+            const user = userStr ? JSON.parse(userStr) : null;
+
+            if (!user) {
+                throw new Error("Debes iniciar sesión para publicar");
+            }
+
+            const response = await fetch('http://localhost:3000/api/products', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userId: user.id, // Enviar ID real del usuario
+                    ...data,
+                    imageUrl: previewUrl || "" // Enviar URL de imagen si existe
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al publicar producto');
+            }
+
+            console.log("Producto publicado!");
+            alert("Producto publicado exitosamente");
+            // Reset form
+            // form.reset(); 
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
@@ -171,8 +207,8 @@ export function MyStoreSection() {
                                     </Button>
                                 </div>
 
-                                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 size-lg">
-                                    Publicar Producto
+                                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isSubmitting}>
+                                    {isSubmitting ? "Publicando..." : "Publicar Producto"}
                                 </Button>
                             </form>
                         </Form>

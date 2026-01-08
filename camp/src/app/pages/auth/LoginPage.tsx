@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "../../components/ui/button";
@@ -24,6 +25,7 @@ const loginSchema = z.object({
 
 export function LoginPage() {
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -32,13 +34,34 @@ export function LoginPage() {
         },
     });
 
-    function onSubmit(values: z.infer<typeof loginSchema>) {
-        console.log(values);
-        // Simular login exitoso
-        navigate("/");
-    }
+    async function onSubmit(data: z.infer<typeof loginSchema>) {
+        setIsLoading(true);
+        try {
+            const response = await fetch('http://localhost:3000/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            });
 
-    return (
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Error en inicio de sesión');
+            }
+
+            console.log('Login exitoso:', result);
+            localStorage.setItem('token', result.token); // Save jwt
+            localStorage.setItem('user', JSON.stringify(result.user));
+            navigate("/");
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    } return (
         <div>
             <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">Iniciar Sesión</h1>
@@ -75,8 +98,8 @@ export function LoginPage() {
                             </FormItem>
                         )}
                     />
-                    <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
-                        Ingresar
+                    <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isLoading}>
+                        {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
                     </Button>
                 </form>
             </Form>

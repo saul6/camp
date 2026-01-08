@@ -3,6 +3,7 @@ import { AuthLayout } from "./layouts/AuthLayout";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
+import ProfilePage from "./pages/auth/ProfilePage";
 import { MyStoreSection } from "./components/sections/MyStoreSection";
 import { FeedSection } from "./components/sections/FeedSection";
 import { NetworkSection } from "./components/sections/NetworkSection";
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/insights" element={<InsightsSection />} />
           <Route path="/events" element={<EventsSection />} />
           <Route path="/settings" element={<SettingsSection />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
