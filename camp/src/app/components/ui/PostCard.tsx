@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { Heart, MessageCircle, Share2, MoreHorizontal } from "lucide-react";
@@ -100,12 +101,16 @@ export function PostCard({ post, currentUserId }: PostCardProps) {
             {/* Header */}
             <div className="p-4 flex items-start justify-between">
                 <div className="flex gap-3">
-                    <Avatar className="h-10 w-10">
-                        <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${post.author_name}`} />
-                        <AvatarFallback>{initials}</AvatarFallback>
-                    </Avatar>
+                    <Link to={`/profile/${post.user_id}`}>
+                        <Avatar className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${post.author_name}`} />
+                            <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                    </Link>
                     <div>
-                        <h3 className="font-semibold text-sm">{post.author_name}</h3>
+                        <Link to={`/profile/${post.user_id}`} className="hover:underline">
+                            <h3 className="font-semibold text-sm">{post.author_name}</h3>
+                        </Link>
                         <p className="text-xs text-gray-500">{post.author_type}</p>
                         <p className="text-xs text-xs text-gray-400">
                             {(() => {

@@ -34,7 +34,7 @@ export default function App() {
           <Route path="/insights" element={<InsightsSection />} />
           <Route path="/events" element={<EventsSection />} />
           <Route path="/settings" element={<SettingsSection />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:id?" element={<ProfilePage />} />
         </Route>
       </Routes>
     </BrowserRouter>

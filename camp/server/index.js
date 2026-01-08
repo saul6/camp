@@ -416,6 +416,38 @@ app.get('/api/notifications', async (req, res) => {
     }
 });
 
+// 14. GET USER DETAILS (Profile + Stats)
+app.get('/api/users/:id', async (req, res) => {
+    const targetUserId = req.params.id;
+    const currentUserId = req.query.currentUserId;
+
+    try {
+        // Get Basic Info
+        const [users] = await pool.query('SELECT id, name, email, profile_type FROM users WHERE id = ?', [targetUserId]);
+        if (users.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
+        const user = users[0];
+
+        // Get Stats
+        const [followers] = await pool.query('SELECT COUNT(*) as count FROM connections WHERE following_id = ?', [targetUserId]);
+        const [following] = await pool.query('SELECT COUNT(*) as count FROM connections WHERE follower_id = ?', [targetUserId]);
+
+        user.followersCount = followers[0].count;
+        user.followingCount = following[0].count;
+
+        // Check if current user is following target user
+        user.isFollowing = false;
+        if (currentUserId && currentUserId != targetUserId) {
+            const [rows] = await pool.query('SELECT 1 FROM connections WHERE follower_id = ? AND following_id = ?', [currentUserId, targetUserId]);
+            user.isFollowing = rows.length > 0;
+        }
+
+        res.json(user);
+    } catch (error) {
+        console.error('Error getting user details:', error);
+        res.status(500).json({ message: 'Error obteniendo detalles del usuario' });
+    }
+});
+
 // Basic Route
 app.get('/', (req, res) => {
     res.send('API de AgroCore funcionando 🚀');
