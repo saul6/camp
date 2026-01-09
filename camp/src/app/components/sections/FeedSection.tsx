@@ -39,8 +39,38 @@ export function FeedSection() {
     }
   };
 
+  /* Trends State */
+  const [trends, setTrends] = useState<{ tag: string; count: number }[]>([]);
+  /* Stats State */
+  const [connectionsCount, setConnectionsCount] = useState(0);
+
+  const fetchTrends = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/api/trends");
+      const data = await res.json();
+      if (Array.isArray(data)) setTrends(data);
+    } catch (error) {
+      console.error("Error fetching trends:", error);
+    }
+  };
+
+  const fetchUserStats = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`http://localhost:3000/api/users/${user.id}`);
+      const data = await res.json();
+      if (data && typeof data.connectionsCount === 'number') {
+        setConnectionsCount(data.connectionsCount);
+      }
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+    }
+  };
+
   useEffect(() => {
     fetchPosts();
+    fetchTrends();
+    fetchUserStats();
   }, []);
 
   /* Handle File Selection */
@@ -93,6 +123,7 @@ export function FeedSection() {
         setImagePreview("");
         if (fileRef.current) fileRef.current.value = "";
         fetchPosts(); // Refresh feed
+        fetchTrends(); // Refresh trends in case new tags were added
       } else {
         const errData = await response.json().catch(() => ({}));
         alert(`Error al publicar: ${errData.message || response.statusText}`);
@@ -117,6 +148,9 @@ export function FeedSection() {
 
   const filteredPosts = posts.filter(post => {
     if (activeFilter === "all") return true;
+    if (activeFilter.startsWith("#")) {
+      return post.content?.toLowerCase().includes(activeFilter.toLowerCase());
+    }
     return post.author_type?.toLowerCase() === activeFilter.toLowerCase();
   });
 
@@ -196,14 +230,21 @@ export function FeedSection() {
 
             {/* Filtros */}
             <Card className="p-2">
-              <Tabs value={activeFilter} onValueChange={setActiveFilter} className="w-full">
-                <TabsList className="w-full grid grid-cols-4">
-                  <TabsTrigger value="all">Todos</TabsTrigger>
-                  <TabsTrigger value="agricola">Agrícola</TabsTrigger>
-                  <TabsTrigger value="agroquimica">Agroquímica</TabsTrigger>
-                  <TabsTrigger value="comercializadora">Comercial</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="flex items-center justify-between">
+                <Tabs value={activeFilter.startsWith("#") ? "all" : activeFilter} onValueChange={setActiveFilter} className="w-full">
+                  <TabsList className="w-full grid grid-cols-4">
+                    <TabsTrigger value="all">Todos</TabsTrigger>
+                    <TabsTrigger value="agricola">Agrícola</TabsTrigger>
+                    <TabsTrigger value="agroquimica">Agroquímica</TabsTrigger>
+                    <TabsTrigger value="comercializadora">Comercial</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                {activeFilter.startsWith("#") && (
+                  <Button variant="ghost" size="sm" onClick={() => setActiveFilter("all")} className="ml-2 text-red-500 hover:bg-red-50">
+                    X {activeFilter}
+                  </Button>
+                )}
+              </div>
             </Card>
 
             {/* Posts */}
@@ -213,7 +254,16 @@ export function FeedSection() {
               ))}
               {filteredPosts.length === 0 && (
                 <div className="text-center py-10 bg-white rounded-lg shadow">
-                  <p className="text-gray-500">No hay publicaciones en esta categoría.</p>
+                  <p className="text-gray-500">
+                    {activeFilter.startsWith("#")
+                      ? `No hay publicaciones con el trend ${activeFilter}`
+                      : "No hay publicaciones en esta categoría."}
+                  </p>
+                  {activeFilter !== "all" && (
+                    <Button variant="link" onClick={() => setActiveFilter("all")}>
+                      Ver todo
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -227,7 +277,7 @@ export function FeedSection() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Conexiones</span>
-                  <span className="font-semibold text-green-600">--</span>
+                  <span className="font-semibold text-green-600">{connectionsCount}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Publicaciones</span>
@@ -243,14 +293,20 @@ export function FeedSection() {
                 <h3 className="font-semibold">Tendencias</h3>
               </div>
               <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">#RiegoTecnificado</p>
-                  <p className="text-xs text-gray-500">Popular</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">#PreciosMaíz</p>
-                  <p className="text-xs text-gray-500">Tendencia hoy</p>
-                </div>
+                {trends.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No hay tendencias aún</p>
+                ) : (
+                  trends.map((t, idx) => (
+                    <div
+                      key={idx}
+                      className="cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors"
+                      onClick={() => setActiveFilter(t.tag)}
+                    >
+                      <p className="text-sm font-medium text-gray-900">{t.tag}</p>
+                      <p className="text-xs text-gray-500">{t.count} posts</p>
+                    </div>
+                  ))
+                )}
               </div>
             </Card>
           </div>

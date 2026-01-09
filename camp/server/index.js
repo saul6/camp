@@ -507,8 +507,17 @@ app.get('/api/users/:id', async (req, res) => {
         const [followers] = await pool.query('SELECT COUNT(*) as count FROM connections WHERE following_id = ?', [targetUserId]);
         const [following] = await pool.query('SELECT COUNT(*) as count FROM connections WHERE follower_id = ?', [targetUserId]);
 
+        // Mutual connections: Users I follow who also follow me
+        const [connections] = await pool.query(`
+            SELECT COUNT(*) as count 
+            FROM connections c1
+            JOIN connections c2 ON c1.following_id = c2.follower_id 
+            WHERE c1.follower_id = ? AND c2.following_id = ?
+        `, [targetUserId, targetUserId]);
+
         user.followersCount = followers[0].count;
         user.followingCount = following[0].count;
+        user.connectionsCount = connections[0].count;
 
         // Check if current user is following target user
         user.isFollowing = false;
@@ -563,6 +572,51 @@ app.get('/api/users/:id/following', async (req, res) => {
     } catch (error) {
         console.error('Error getting following:', error);
         res.status(500).json({ message: 'Error obteniendo seguidos' });
+    }
+});
+
+// 16.5 GET TRENDS (Popular Hashtags)
+app.get('/api/trends', async (req, res) => {
+    try {
+        console.log('[TRENDS] Request received');
+        // Fetch recent posts to extract tags
+        const [rows] = await pool.query('SELECT content FROM posts ORDER BY created_at DESC LIMIT 100');
+
+        console.log(`[TRENDS] Analysing ${rows.length} posts`);
+
+        const tagCounts = {};
+        rows.forEach(row => {
+            const content = row.content || "";
+            // Regex to find hashtags: #word (alphanumeric includes accents)
+            const matches = content.match(/#[a-zA-Z0-9_ñÑáéíóúÁÉÍÓÚ]+/g);
+            if (matches) {
+                // console.log(`[TRENDS] Found tags in "${content}":`, matches);
+                matches.forEach(tag => {
+                    tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                });
+            }
+        });
+
+        console.log('[TRENDS] Counts:', tagCounts);
+
+        // Convert to array, sort by count, take top 5
+        const sortedTrends = Object.entries(tagCounts)
+            .map(([tag, count]) => ({ tag, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
+        console.log('[TRENDS] Sorted Result:', sortedTrends);
+
+        // If not enough trends, add some defaults
+        if (sortedTrends.length < 3) {
+            if (!tagCounts['#AgroCore']) sortedTrends.push({ tag: '#AgroCore', count: 1 });
+            if (!tagCounts['#Agricultura']) sortedTrends.push({ tag: '#Agricultura', count: 1 });
+        }
+
+        res.json(sortedTrends);
+    } catch (error) {
+        console.error('Error getting trends:', error);
+        res.status(500).json({ message: 'Error obteniendo tendencias' });
     }
 });
 
