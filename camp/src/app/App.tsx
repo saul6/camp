@@ -4,6 +4,7 @@ import { DashboardLayout } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import ProfilePage from "./pages/auth/ProfilePage";
+import MessagesPage from "./pages/auth/MessagesPage";
 import { MyStoreSection } from "./components/sections/MyStoreSection";
 import { FeedSection } from "./components/sections/FeedSection";
 import { NetworkSection } from "./components/sections/NetworkSection";
@@ -35,6 +36,8 @@ export default function App() {
           <Route path="/events" element={<EventsSection />} />
           <Route path="/settings" element={<SettingsSection />} />
           <Route path="/profile/:id?" element={<ProfilePage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/messages/:userId" element={<MessagesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Separator } from "../../components/ui/separator";
-import { MapPin, Calendar, Globe, Camera, Edit, MoreHorizontal, Image as ImageIcon, Smile, User, UserPlus, UserCheck } from "lucide-react";
+import { MapPin, Calendar, Globe, Camera, Edit, MoreHorizontal, Image as ImageIcon, Smile, User, UserPlus, UserCheck, MessageSquare } from "lucide-react";
 import { PostCard, Post } from "../../components/ui/PostCard";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { UserListDialog } from "../../components/UserListDialog";
@@ -21,6 +21,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [posts, setPosts] = useState<Post[]>([]);
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -202,13 +203,22 @@ export default function ProfilePage() {
                                         </Button>
                                     </>
                                 ) : (
-                                    <Button
-                                        onClick={handleFollowToggle}
-                                        className={`flex-1 md:flex-none gap-2 ${profileUser.isFollowing ? 'bg-white text-green-600 border border-green-600 hover:bg-green-50' : 'bg-green-600 hover:bg-green-700 text-white'}`}
-                                    >
-                                        {profileUser.isFollowing ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                                        {profileUser.isFollowing ? 'Siguiendo' : 'Seguir'}
-                                    </Button>
+                                    <>
+                                        <Button
+                                            onClick={handleFollowToggle}
+                                            className={`flex-1 md:flex-none gap-2 ${profileUser.isFollowing ? 'bg-white text-green-600 border border-green-600 hover:bg-green-50' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                                        >
+                                            {profileUser.isFollowing ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                                            {profileUser.isFollowing ? 'Siguiendo' : 'Seguir'}
+                                        </Button>
+                                        <Button
+                                            onClick={() => navigate(`/messages/${profileUser.id}`)}
+                                            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                        >
+                                            <MessageSquare className="h-4 w-4" />
+                                            Mensaje
+                                        </Button>
+                                    </>
                                 )}
 
                                 <Button variant="ghost" className="bg-gray-200 hover:bg-gray-300" size="icon">

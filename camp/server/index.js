@@ -47,6 +47,31 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Typing Indicators
+    socket.on('typing_start', ({ toUserId, fromUserId }) => {
+        io.to(`user_${toUserId}`).emit('typing_start', { fromUserId });
+    });
+
+    socket.on('typing_stop', ({ toUserId, fromUserId }) => {
+        io.to(`user_${toUserId}`).emit('typing_stop', { fromUserId });
+    });
+
+    // Mark Messages as Read
+    socket.on('mark_read', async ({ senderId, receiverId }) => {
+        // senderId is the one who sent the messages (the OTHER person)
+        // receiverId is ME (the one reading them)
+        try {
+            await pool.query(
+                'UPDATE messages SET is_read = TRUE WHERE sender_id = ? AND receiver_id = ? AND is_read = FALSE',
+                [senderId, receiverId]
+            );
+            // Notify the sender that their messages were read
+            io.to(`user_${senderId}`).emit('messages_read', { byUserId: receiverId });
+        } catch (error) {
+            console.error('Error marking read via socket:', error);
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
@@ -552,6 +577,112 @@ app.get('/api/search', async (req, res) => {
     } catch (error) {
         console.error('Error searching:', error);
         res.status(500).json({ message: 'Error en búsqueda' });
+    }
+});
+
+// 18. SEND MESSAGE
+app.post('/api/messages', async (req, res) => {
+    const { senderId, receiverId, content } = req.body;
+
+
+
+    try {
+        // Save to DB
+        const [result] = await pool.query(
+            'INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)',
+            [senderId, receiverId, content]
+        );
+
+        const newMessage = {
+            id: result.insertId,
+            sender_id: senderId,
+            receiver_id: receiverId,
+            content,
+            created_at: new Date(),
+            is_read: false
+        };
+
+        // Emit to Socket Room of Receiver
+        io.to(`user_${receiverId}`).emit('new_message', newMessage);
+
+
+        // Notify receiver with a general notification too
+
+        await sendNotification(receiverId, senderId, 'message', result.insertId);
+
+        res.json(newMessage);
+    } catch (error) {
+        console.error('Error sending message:', error);
+        res.status(500).json({ message: 'Error enviando mensaje' });
+    }
+});
+
+// 19. GET CONVERSATIONS (Last message for each contact)
+app.get('/api/messages/conversations', async (req, res) => {
+    const currentUserId = req.query.userId;
+    if (!currentUserId) return res.status(400).json({ message: 'userId required' });
+
+    try {
+        // Complex query to get the last message for every user interacted with
+        // We find all unique pairs, then get the User details and the last message content
+        const query = `
+            SELECT 
+                u.id, u.name, u.email, 
+                m.content as last_message, 
+                m.created_at,
+                (SELECT COUNT(*) FROM messages WHERE sender_id = u.id AND receiver_id = ? AND is_read = FALSE) as unread_count
+            FROM users u
+            JOIN (
+                SELECT 
+                    CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as contact_id,
+                    MAX(id) as max_id
+                FROM messages
+                WHERE sender_id = ? OR receiver_id = ?
+                GROUP BY contact_id
+            ) last_msg ON u.id = last_msg.contact_id
+            JOIN messages m ON m.id = last_msg.max_id
+            ORDER BY m.created_at DESC
+        `;
+
+        const [conversations] = await pool.query(query, [
+            currentUserId,
+            currentUserId,
+            currentUserId, currentUserId
+        ]);
+
+        res.json(conversations);
+    } catch (error) {
+        console.error('Error getting conversations:', error);
+        res.status(500).json({ message: 'Error obteniendo conversaciones' });
+    }
+});
+
+// 20. GET MESSAGE HISTORY WITH USER
+app.get('/api/messages/:otherUserId', async (req, res) => {
+    const currentUserId = req.query.currentUserId;
+    const otherUserId = req.params.otherUserId;
+
+    if (!currentUserId) return res.status(400).json({ message: 'currentUserId required' });
+
+    try {
+        const [messages] = await pool.query(
+            `SELECT * FROM messages 
+             WHERE (sender_id = ? AND receiver_id = ?) 
+                OR (sender_id = ? AND receiver_id = ?)
+             ORDER BY created_at ASC`,
+            [currentUserId, otherUserId, otherUserId, currentUserId]
+        );
+
+        // Mark as read (optional, can be done via separate endpoint or here implicitly)
+        await pool.query(
+            'UPDATE messages SET is_read = TRUE WHERE sender_id = ? AND receiver_id = ? AND is_read = FALSE',
+            [otherUserId, currentUserId]
+        );
+
+        res.json(messages);
+    } catch (error) {
+        console.error('Error getting messages:', error);
+        res.status(500).json({ message: 'Error obteniendo mensajes' });
     }
 });
 

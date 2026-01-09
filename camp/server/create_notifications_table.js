@@ -19,7 +19,7 @@ async function createNotificationsTable() {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 actor_id INT NOT NULL,
-                type ENUM('like', 'comment', 'follow') NOT NULL,
+                type ENUM('like', 'comment', 'follow', 'message') NOT NULL,
                 reference_id INT,
                 is_read BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
