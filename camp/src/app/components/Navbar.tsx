@@ -208,79 +208,81 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             )}
           </div>
 
-          <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/messages')}>
-            <MessageSquare className="h-5 w-5" />
-            {/* Optional: Add badge for total unread messages count if available */}
-          </Button>
+          {/* Acciones */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/messages')}>
+              <MessageSquare className="h-5 w-5" />
+              {/* Optional: Add badge for total unread messages count if available */}
+            </Button>
 
-          {/* Notifications Dropdown */}
-          <NotificationDropdown
-            unreadCount={unreadCount}
-            userId={user.id}
-            navigate={navigate}
-          />
+            {/* Notifications Dropdown */}
+            <NotificationDropdown
+              unreadCount={unreadCount}
+              userId={user.id}
+              navigate={navigate}
+            />
 
-          <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-            <DropdownMenuTrigger asChild>
-              <div
+            <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+              <DropdownMenuTrigger asChild>
+                <div
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
+                  className="inline-block"
+                >
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0 overflow-hidden hover:opacity-80 transition-opacity">
+                    <div className="h-full w-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                      <span className="text-white text-sm font-semibold">{initials}</span>
+                    </div>
+                  </Button>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-56"
+                align="end"
+                forceMount
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
-                className="inline-block"
               >
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0 overflow-hidden hover:opacity-80 transition-opacity">
-                  <div className="h-full w-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                    <span className="text-white text-sm font-semibold">{initials}</span>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user.email}
+                    </p>
                   </div>
-                </Button>
-              </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-56"
-              align="end"
-              forceMount
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.name}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate(`/profile/${user.id}`)} className="cursor-pointer">
-                <User className="mr-2 h-4 w-4" />
-                <span>Mi Perfil</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/settings")} className="cursor-pointer">
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                <span>Configuración</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Cerrar sesión</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate(`/profile/${user.id}`)} className="cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Mi Perfil</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/settings")} className="cursor-pointer">
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  <span>Configuración</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Cerrar sesión</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
 
-      {/* Búsqueda Mobile (simplificada por ahora, idealmente debería abrir un overlay) */}
-      <div className="pb-3 md:hidden">
-        {/* ... Implementación Mobile pendiente ... */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            type="search"
-            placeholder="Buscar..."
-            className="pl-10 w-full"
-          />
+        {/* Búsqueda Mobile (simplificada por ahora, idealmente debería abrir un overlay) */}
+        <div className="pb-3 md:hidden">
+          {/* ... Implementación Mobile pendiente ... */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              type="search"
+              placeholder="Buscar..."
+              className="pl-10 w-full"
+            />
+          </div>
         </div>
       </div>
-    </div>
     </nav >
   );
 }
