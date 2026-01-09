@@ -11,6 +11,7 @@ interface Message {
     sender_id: number;
     receiver_id: number;
     content: string;
+    image_url?: string;
     created_at: string;
     is_read: boolean;
 }
@@ -46,8 +47,11 @@ export default function MessagesPage() {
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Current Auth User
     const userStr = localStorage.getItem('user');
@@ -178,27 +182,55 @@ export default function MessagesPage() {
 
     const sendMessage = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!newMessage.trim() || !userId) return;
+        if ((!newMessage.trim() && !selectedFile) || !userId) return;
 
         try {
-            const res = await fetch('http://localhost:3000/api/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    senderId: currentUser.id,
-                    receiverId: userId,
-                    content: newMessage
-                })
-            });
+            let res;
+            if (selectedFile) {
+                const formData = new FormData();
+                formData.append('senderId', currentUser.id);
+                formData.append('receiverId', userId);
+                formData.append('content', newMessage);
+                formData.append('image', selectedFile);
+
+                res = await fetch('http://localhost:3000/api/messages', {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                res = await fetch('http://localhost:3000/api/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        senderId: currentUser.id,
+                        receiverId: userId,
+                        content: newMessage
+                    })
+                });
+            }
 
             const savedMessage = await res.json();
             setMessages(prev => [...prev, savedMessage]);
             setNewMessage("");
+            setSelectedFile(null);
+            setPreviewUrl(null);
             scrollToBottom();
             fetchConversations(); // Update sidebar snippet
 
         } catch (error) {
             console.error("Error sending message:", error);
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setSelectedFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewUrl(reader.result as string);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -355,11 +387,19 @@ export default function MessagesPage() {
                                                     : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
                                                     }`}
                                             >
-                                                <p>{msg.content}</p>
+                                                {msg.image_url && (
+                                                    <img
+                                                        src={msg.image_url}
+                                                        alt="Compartida"
+                                                        className="mb-2 rounded-lg max-w-full h-auto max-h-60 object-cover cursor-pointer"
+                                                        onClick={() => window.open(msg.image_url, '_blank')}
+                                                    />
+                                                )}
+                                                {msg.content && <p>{msg.content}</p>}
                                                 <div className={`text-[10px] mt-1 text-right opacity-70 ${isMe ? 'text-green-100' : 'text-gray-400'}`}>
                                                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     {isMe && (
-                                                        <CheckCheck className={`inline-block ml-1 h-3 w-3 ${msg.is_read ? 'text-blue-200' : 'text-green-200/60'}`} />
+                                                        <CheckCheck className={`inline-block ml-1 h-4 w-4 ${msg.is_read ? 'text-blue-200 stroke-[3px]' : 'text-green-200/50'}`} />
                                                     )}
                                                 </div>
                                             </div>
@@ -382,30 +422,60 @@ export default function MessagesPage() {
 
                         {/* Input Area */}
                         <form onSubmit={sendMessage} className="p-4 border-t border-gray-100 bg-white rounded-b-lg shrink-0">
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    value={newMessage}
-                                    onChange={(e) => {
-                                        setNewMessage(e.target.value);
+                            <div className="flex flex-col gap-2 w-full">
+                                {previewUrl && (
+                                    <div className="relative inline-block self-start">
+                                        <img src={previewUrl} alt="Preview" className="h-20 w-auto rounded-lg border border-gray-200" />
+                                        <button
+                                            type="button"
+                                            onClick={() => { setSelectedFile(null); setPreviewUrl(null); }}
+                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 h-4 w-4 flex items-center justify-center text-xs"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        accept="image/*"
+                                        onChange={handleFileSelect}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-gray-400 hover:text-green-600"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        <span className="text-xl">📷</span>
+                                    </Button>
+                                    <Input
+                                        value={newMessage}
+                                        onChange={(e) => {
+                                            setNewMessage(e.target.value);
 
-                                        // Typing logic
-                                        if (socket && userId) {
-                                            if (!typingTimeoutRef.current) {
-                                                socket.emit('typing_start', { toUserId: userId, fromUserId: currentUser.id });
+                                            // Typing logic
+                                            if (socket && userId) {
+                                                if (!typingTimeoutRef.current) {
+                                                    socket.emit('typing_start', { toUserId: userId, fromUserId: currentUser.id });
+                                                }
+                                                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                                                typingTimeoutRef.current = setTimeout(() => {
+                                                    socket.emit('typing_stop', { toUserId: userId, fromUserId: currentUser.id });
+                                                    typingTimeoutRef.current = null;
+                                                }, 2000);
                                             }
-                                            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-                                            typingTimeoutRef.current = setTimeout(() => {
-                                                socket.emit('typing_stop', { toUserId: userId, fromUserId: currentUser.id });
-                                                typingTimeoutRef.current = null;
-                                            }, 2000);
-                                        }
-                                    }}
-                                    placeholder="Escribe un mensaje..."
-                                    className="bg-gray-50 border-gray-200 focus-visible:ring-green-500"
-                                />
-                                <Button type="submit" disabled={!newMessage.trim()} className="bg-green-600 hover:bg-green-700 text-white text-white">
-                                    <Send className="h-4 w-4" />
-                                </Button>
+                                        }}
+                                        placeholder="Escribe un mensaje..."
+                                        className="bg-gray-50 border-gray-200 focus-visible:ring-green-500"
+                                    />
+                                    <Button type="submit" disabled={!newMessage.trim() && !selectedFile} className="bg-green-600 hover:bg-green-700 text-white text-white">
+                                        <Send className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </form>
                     </div>

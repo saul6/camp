@@ -17,6 +17,34 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
+
+// Ensure uploads directory exists
+const uploadDir = 'uploads';
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+// Multer Configuration
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/')
+    },
+    filename: function (req, file, cb) {
+        // Safe filename with timestamp
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext)
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
 // Database Connection Pool
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
@@ -27,6 +55,9 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// Serve uploaded files statically
+app.use('/uploads', express.static('uploads'));
 
 // --- SOCKET.IO SETUP ---
 const io = new Server(server, {
@@ -251,19 +282,22 @@ app.get('/api/posts', async (req, res) => {
 });
 
 // 6. CREATE POST
-app.post('/api/posts', async (req, res) => {
-    const { userId, content, imageUrl } = req.body;
-
-    if (!userId || !content) {
-        return res.status(400).json({ message: 'userId y content son requeridos' });
-    }
-
+// 6. CREATE POST
+app.post('/api/posts', upload.single('image'), async (req, res) => {
     try {
+        // Multer parses body after file
+        const { userId, content } = req.body;
+        const imageUrl = req.file ? `http://localhost:3000/uploads/${req.file.filename}` : req.body.imageUrl;
+
+        if (!userId || (!content && !imageUrl)) {
+            return res.status(400).json({ message: 'userId y content/image son requeridos' });
+        }
+
         const [result] = await pool.query(
             'INSERT INTO posts (user_id, content, image_url) VALUES (?, ?, ?)',
             [userId, content, imageUrl]
         );
-        res.status(201).json({ message: 'Post creado', postId: result.insertId });
+        res.status(201).json({ message: 'Post creado', postId: result.insertId, imageUrl });
     } catch (error) {
         console.error('Error creating post:', error);
         res.status(500).json({ message: 'Error creando post' });
@@ -581,23 +615,24 @@ app.get('/api/search', async (req, res) => {
 });
 
 // 18. SEND MESSAGE
-app.post('/api/messages', async (req, res) => {
-    const { senderId, receiverId, content } = req.body;
-
-
-
+// 18. SEND MESSAGE
+app.post('/api/messages', upload.single('image'), async (req, res) => {
     try {
+        const { senderId, receiverId, content } = req.body;
+        const imageUrl = req.file ? `http://localhost:3000/uploads/${req.file.filename}` : req.body.imageUrl;
+
         // Save to DB
         const [result] = await pool.query(
-            'INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)',
-            [senderId, receiverId, content]
+            'INSERT INTO messages (sender_id, receiver_id, content, image_url) VALUES (?, ?, ?, ?)',
+            [senderId, receiverId, content, imageUrl]
         );
 
         const newMessage = {
             id: result.insertId,
-            sender_id: senderId,
-            receiver_id: receiverId,
+            sender_id: parseInt(senderId),
+            receiver_id: parseInt(receiverId),
             content,
+            image_url: imageUrl,
             created_at: new Date(),
             is_read: false
         };
@@ -605,9 +640,7 @@ app.post('/api/messages', async (req, res) => {
         // Emit to Socket Room of Receiver
         io.to(`user_${receiverId}`).emit('new_message', newMessage);
 
-
         // Notify receiver with a general notification too
-
         await sendNotification(receiverId, senderId, 'message', result.insertId);
 
         res.json(newMessage);

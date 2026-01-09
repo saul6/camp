@@ -64,15 +64,30 @@ export function FeedSection() {
 
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:3000/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          content: newPostContent,
-          imageUrl: newPostImage || null
-        }),
-      });
+      let response;
+      if (newPostImage && fileRef.current?.files?.[0]) {
+        // Use FormData for File Upload
+        const formData = new FormData();
+        formData.append('userId', user.id);
+        formData.append('content', newPostContent);
+        formData.append('image', fileRef.current.files[0]);
+
+        response = await fetch("http://localhost:3000/api/posts", {
+          method: "POST",
+          body: formData, // No Content-Type header needed, browser sets it with boundary
+        });
+      } else {
+        // Fallback to JSON (legacy or text-only)
+        response = await fetch("http://localhost:3000/api/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            content: newPostContent,
+            imageUrl: null // No image
+          }),
+        });
+      }
 
       if (response.ok) {
         setNewPostContent("");
