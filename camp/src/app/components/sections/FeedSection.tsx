@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { TrendingUp, Users } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { Textarea } from "../ui/textarea";
-import { Input } from "../ui/input";
 import { PostCard, Post } from "../ui/PostCard";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 
@@ -16,7 +15,6 @@ export function FeedSection() {
 
   /* New state for previewing image */
   const [imagePreview, setImagePreview] = useState("");
-  const fileInputRef = useState<HTMLInputElement | null>(null);
 
   /* Fix useRef usage: standard react hook */
   const fileRef = useRef<HTMLInputElement>(null);
@@ -114,6 +112,14 @@ export function FeedSection() {
     }
   };
 
+  /* Filter State */
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  const filteredPosts = posts.filter(post => {
+    if (activeFilter === "all") return true;
+    return post.author_type?.toLowerCase() === activeFilter.toLowerCase();
+  });
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <ErrorBoundary>
@@ -190,24 +196,24 @@ export function FeedSection() {
 
             {/* Filtros */}
             <Card className="p-2">
-              <Tabs defaultValue="all" className="w-full">
+              <Tabs value={activeFilter} onValueChange={setActiveFilter} className="w-full">
                 <TabsList className="w-full grid grid-cols-4">
                   <TabsTrigger value="all">Todos</TabsTrigger>
-                  <TabsTrigger value="producers">Productores</TabsTrigger>
-                  <TabsTrigger value="suppliers">Proveedores</TabsTrigger>
-                  <TabsTrigger value="buyers">Compradores</TabsTrigger>
+                  <TabsTrigger value="agricola">Agrícola</TabsTrigger>
+                  <TabsTrigger value="agroquimica">Agroquímica</TabsTrigger>
+                  <TabsTrigger value="comercializadora">Comercial</TabsTrigger>
                 </TabsList>
               </Tabs>
             </Card>
 
             {/* Posts */}
             <div className="space-y-4">
-              {posts.map((post) => (
+              {filteredPosts.map((post) => (
                 <PostCard key={post.id} post={post} currentUserId={user?.id || 0} />
               ))}
-              {posts.length === 0 && (
+              {filteredPosts.length === 0 && (
                 <div className="text-center py-10 bg-white rounded-lg shadow">
-                  <p className="text-gray-500">No hay publicaciones aún. ¡Sé el primero!</p>
+                  <p className="text-gray-500">No hay publicaciones en esta categoría.</p>
                 </div>
               )}
             </div>
