@@ -475,6 +475,23 @@ app.get('/api/notifications', async (req, res) => {
     }
 });
 
+// 13.5 DELETE ALL NOTIFICATIONS
+app.delete('/api/notifications', async (req, res) => {
+    const userId = req.query.userId;
+
+    if (!userId || userId === 'undefined' || userId === 'null') {
+        return res.status(400).json({ message: 'Falta userId valido' });
+    }
+
+    try {
+        const [result] = await pool.query('DELETE FROM notifications WHERE user_id = ?', [userId]);
+        res.json({ message: 'Notificaciones eliminadas', deleted: result.affectedRows });
+    } catch (error) {
+        console.error('Error deleting notifications:', error);
+        res.status(500).json({ message: 'Error eliminando notificaciones' });
+    }
+});
+
 // 14. GET USER DETAILS (Profile + Stats)
 app.get('/api/users/:id', async (req, res) => {
     const targetUserId = req.params.id;
