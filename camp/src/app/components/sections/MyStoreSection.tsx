@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
@@ -49,6 +50,7 @@ export function MyStoreSection() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [file, setFile] = useState<File | null>(null);
 
     const onSubmit = async (data: z.infer<typeof productSchema>) => {
         setIsSubmitting(true);
@@ -60,16 +62,20 @@ export function MyStoreSection() {
                 throw new Error("Debes iniciar sesión para publicar");
             }
 
+            const formData = new FormData();
+            formData.append('userId', user.id);
+            formData.append('name', data.name);
+            formData.append('price', data.price);
+            formData.append('unit', data.unit);
+            formData.append('category', data.category);
+            formData.append('description', data.description);
+            if (file) {
+                formData.append('image', file);
+            }
+
             const response = await fetch('http://localhost:3000/api/products', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId: user.id, // Enviar ID real del usuario
-                    ...data,
-                    imageUrl: previewUrl || "" // Enviar URL de imagen si existe
-                })
+                body: formData, // No Content-Type header needed
             });
 
             if (!response.ok) {
@@ -77,9 +83,13 @@ export function MyStoreSection() {
             }
 
             console.log("Producto publicado!");
-            alert("Producto publicado exitosamente");
-            // Reset form
-            // form.reset(); 
+            toast.success("Producto publicado exitosamente", {
+                description: "Tu producto ya está visible en el Marketplace.",
+                duration: 4000,
+            });
+            form.reset();
+            setPreviewUrl(null);
+            setFile(null);
         } catch (error: any) {
             console.error(error);
             alert(error.message);
@@ -202,9 +212,35 @@ export function MyStoreSection() {
                                     <p className="text-xs text-gray-500 mt-1">
                                         PNG, JPG hasta 5MB
                                     </p>
-                                    <Button type="button" variant="outline" className="mt-4" size="sm">
+                                    <Input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        id="product-image-upload"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                setFile(file);
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    setPreviewUrl(reader.result as string);
+                                                };
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="mt-4"
+                                        size="sm"
+                                        onClick={() => document.getElementById('product-image-upload')?.click()}
+                                    >
                                         Seleccionar Archivo
                                     </Button>
+                                    {previewUrl && (
+                                        <img src={previewUrl} alt="Preview" className="mt-4 h-32 w-auto mx-auto rounded-lg border object-cover" />
+                                    )}
                                 </div>
 
                                 <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isSubmitting}>

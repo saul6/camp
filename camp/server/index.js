@@ -229,21 +229,22 @@ app.get('/api/products', async (req, res) => {
 });
 
 // 4. CREATE PRODUCT
-app.post('/api/products', async (req, res) => {
-    const { userId, name, description, price, unit, category, imageUrl } = req.body;
-
-    // Simple validation
-    if (!userId || !name || !price) {
-        return res.status(400).json({ message: 'Faltan datos requeridos (userId, name, price)' });
-    }
-
+app.post('/api/products', upload.single('image'), async (req, res) => {
     try {
+        const { userId, name, description, price, unit, category } = req.body;
+        const imageUrl = req.file ? `http://localhost:3000/uploads/${req.file.filename}` : req.body.imageUrl;
+
+        // Simple validation
+        if (!userId || !name || !price) {
+            return res.status(400).json({ message: 'Faltan datos requeridos (userId, name, price)' });
+        }
+
         const [result] = await pool.query(
             'INSERT INTO products (user_id, name, description, price, unit, category, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [userId, name, description, price, unit, category, imageUrl]
         );
 
-        res.status(201).json({ message: 'Producto publicado', productId: result.insertId });
+        res.status(201).json({ message: 'Producto publicado', productId: result.insertId, imageUrl });
     } catch (error) {
         console.error('Error creando producto:', error);
         res.status(500).json({ message: 'Error al publicar producto' });
