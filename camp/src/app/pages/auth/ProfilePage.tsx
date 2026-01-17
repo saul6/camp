@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -22,6 +22,7 @@ interface UserProfile {
 export default function ProfilePage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [posts, setPosts] = useState<Post[]>([]);
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -34,11 +35,45 @@ export default function ProfilePage() {
     const userStr = localStorage.getItem('user');
     const currentUser = userStr ? JSON.parse(userStr) : null;
 
+    // Handle "Search by Name" Mode
+    useEffect(() => {
+        if (id === 'search') {
+            const queryName = searchParams.get('q');
+            if (queryName) {
+                // Fetch users to find the matching name
+                fetch(`http://localhost:3000/api/users`)
+                    .then(res => res.json())
+                    .then((users: any[]) => {
+                        const foundUser = users.find((u: any) => u.name.trim().toLowerCase() === queryName.trim().toLowerCase());
+                        if (foundUser) {
+                            navigate(`/profile/${foundUser.id}`, { replace: true });
+                        } else {
+                            setLoading(false);
+                            setProfileUser(null);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Error searching user:", err);
+                        setLoading(false);
+                    });
+            } else {
+                setLoading(false);
+            }
+        }
+    }, [id, searchParams, navigate]);
+
     // Determine target user ID (URL param or current user)
-    const targetUserId = id ? parseInt(id) : (currentUser ? currentUser.id : 0);
+    // Only parse ID if it is numeric and NOT 'search'
+    const targetUserId = (id && id !== 'search' && !isNaN(parseInt(id)))
+        ? parseInt(id)
+        : (currentUser ? currentUser.id : 0);
+
     const isOwner = currentUser && currentUser.id === targetUserId;
 
     const fetchData = async () => {
+        // If we are in search mode or invalid ID, skip standard fetch
+        if (id === 'search' || (id && isNaN(parseInt(id)))) return;
+
         // Don't set global loading here to avoid full page flicker on silent updates
         try {
             // 1. Fetch User Details
@@ -46,6 +81,8 @@ export default function ProfilePage() {
             if (userRes.ok) {
                 const userData = await userRes.json();
                 setProfileUser(userData);
+            } else {
+                setProfileUser(null);
             }
         } catch (error) {
             console.error("Error refreshing profile data:", error);
@@ -53,6 +90,9 @@ export default function ProfilePage() {
     };
 
     useEffect(() => {
+        // Skip if in search mode
+        if (id === 'search') return;
+
         console.log("ProfilePage Effect: targetUserId", targetUserId);
         if (!targetUserId) {
             console.log("No targetUserId, stopping load");
@@ -76,7 +116,7 @@ export default function ProfilePage() {
         };
 
         loadAll();
-    }, [targetUserId, currentUser?.id]);
+    }, [targetUserId, currentUser?.id, id]);
 
     const handleFollowToggle = async () => {
         if (!profileUser || !currentUser) return;

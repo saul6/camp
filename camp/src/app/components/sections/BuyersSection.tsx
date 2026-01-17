@@ -1,87 +1,111 @@
+import { useEffect, useState } from "react";
 import { Building2, MapPin, Star, TrendingUp, ShoppingBag } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
+import { Link, useNavigate } from "react-router-dom";
+import { SendProposalDialog } from "../dialogs/SendProposalDialog";
 
-const buyers = [
-  {
-    id: 1,
-    name: "FreshMarket Corp",
-    type: "Supermercados",
-    location: "Zamora, México",
-    rating: 4.8,
-    reviews: 245,
-    seeking: ["Frutas", "Hortalizas", "Tubérculos"],
-    volume: "500+ ton/mes",
-    verified: true,
-  },
-  {
-    id: 2,
-    name: "ExportAgro S.A.",
-    type: "Exportadora",
-    location: "Jacona, México",
-    rating: 4.9,
-    reviews: 189,
-    seeking: ["Café", "Aguacate", "Flores"],
-    volume: "1000+ ton/mes",
-    verified: true,
-  },
-  {
-    id: 3,
-    name: "Jugos Naturales del Valle",
-    type: "Procesadora",
-    location: "Chilchota, México",
-    rating: 4.7,
-    reviews: 134,
-    seeking: ["Cítricos", "Frutas Tropicales"],
-    volume: "300+ ton/mes",
-    verified: true,
-  },
-  {
-    id: 4,
-    name: "Restaurantes Premium",
-    type: "Cadena de Restaurantes",
-    location: "Chavinda, México",
-    rating: 4.6,
-    reviews: 98,
-    seeking: ["Vegetales Orgánicos", "Hierbas"],
-    volume: "50+ ton/mes",
-    verified: false,
-  },
-];
+interface Buyer {
+  id: number;
+  name: string;
+  type: string;
+  location: string;
+  rating: number;
+  reviews: number;
+  seeking: string[];
+  volume: string;
+  verified: boolean;
+}
 
-const opportunities = [
-  {
-    id: 1,
-    buyer: "FreshMarket Corp",
-    product: "Tomate",
-    quantity: "20 toneladas",
-    price: "3,500/kg",
-    deadline: "15 días",
-    requirements: "Calidad Premium, certificación GLOBALG.A.P.",
-  },
-  {
-    id: 2,
-    buyer: "ExportAgro S.A.",
-    product: "Aguacate Hass",
-    quantity: "50 toneladas",
-    price: "8,000/kg",
-    deadline: "30 días",
-    requirements: "Calibre 16-20, madurez óptima para exportación",
-  },
-  {
-    id: 3,
-    buyer: "Jugos Naturales del Valle",
-    product: "Naranja Valencia",
-    quantity: "100 toneladas",
-    price: "1,200/kg",
-    deadline: "20 días",
-    requirements: "Alto contenido de jugo, mínimo 12° Brix",
-  },
-];
+interface Opportunity {
+  id: number;
+  buyer: string;
+  product: string;
+  quantity: string;
+  price: string;
+  deadline: string;
+  requirements: string;
+}
 
 export function BuyersSection() {
+  const [buyers, setBuyers] = useState<Buyer[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [stats, setStats] = useState({ buyers: 0, opportunities: 0, proposals: 0, contracts: 0 });
+  const [loading, setLoading] = useState(true);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const navigate = useNavigate();
+
+  const fetchData = async () => {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const userId = currentUser.id;
+
+      const [buyersRes, oppsRes, statsRes] = await Promise.all([
+        fetch('http://localhost:3000/api/buyers'),
+        fetch('http://localhost:3000/api/opportunities'),
+        fetch(`http://localhost:3000/api/market/stats?userId=${userId || ''}`)
+      ]);
+
+      const buyersData = await buyersRes.json();
+      const oppsData = await oppsRes.json();
+      const statsData = await statsRes.json();
+
+      setBuyers(buyersData);
+      setOpportunities(oppsData);
+      setStats(statsData);
+      setLoading(false);
+    } catch (err) {
+      console.error("Error loading data:", err);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleOpenProposal = (opp: Opportunity) => {
+    setSelectedOpportunity(opp);
+  };
+
+  const handleSuccessProposal = () => {
+    fetchData(); // Refresh stats
+  };
+
+  // Helper to create a fake opportunity from a Buyer profile for the generic 'Enviar Propuesta' button
+  const handleBuyerProposal = (buyer: Buyer) => {
+    // This is a bit of a hack since 'Enviar Propuesta' on a Buyer card doesn't have a specific product context.
+    // For now, let's assume it picks their first seeking tag if available, or 'General'.
+    const Product = buyer.seeking[0] || 'General';
+    const fakeOpp: Opportunity = {
+      id: 0, // 0 indicates a direct proposal not linked to a specific opportunity record yet? Or we need logic for this.
+      // Actually, for MVP let's redirect them to the first opportunity of this buyer if exists, or show a 'Not available' message.
+      // Or better: Create a generic opportunity mode.
+      // Let's keep it simple: The 'Enviar Propuesta' on Buyer Card might just open the dialog with pre-filled Buyer Name
+      // We need to support 'buyerId' in the backend if opportunityId is missing?
+      // Wait, backend requires opportunityId.
+      // Let's make the button navigate to their profile for now, or alert 'Select an opportunity from the Opportunities tab'.
+      // User asked for "Funcionales".
+      // Let's direct them to the "Oportunidades" tab filtering by this buyer?
+      // OR: Just alert "Ve a la pestaña Oportunidades para ver que necesita".
+      buyer: buyer.name,
+      product: Product,
+      quantity: 'N/A',
+      price: 'N/A',
+      deadline: 'N/A',
+      requirements: 'Propuesta Directa'
+    } as any; // Cast to avoid strict check on missing fields like id if we allow fake.
+
+    // BUT: The backend requires opportunity_id. We can't send a proposal without an opportunity_id.
+    // Let's disable this button on the Buyer Card for now OR make it scroll to Opportunities.
+    // Let's implement the "Ver Perfil Completo" first.
+    navigate(`/profile/${buyer.id}`);
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Cargando compradores...</div>;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -96,7 +120,7 @@ export function BuyersSection() {
           <div className="flex items-center gap-3">
             <Building2 className="h-8 w-8 text-green-600" />
             <div>
-              <p className="text-2xl font-bold">156</p>
+              <p className="text-2xl font-bold">{stats.buyers}</p>
               <p className="text-sm text-gray-600">Compradores Activos</p>
             </div>
           </div>
@@ -105,7 +129,7 @@ export function BuyersSection() {
           <div className="flex items-center gap-3">
             <ShoppingBag className="h-8 w-8 text-blue-600" />
             <div>
-              <p className="text-2xl font-bold">89</p>
+              <p className="text-2xl font-bold">{stats.opportunities}</p>
               <p className="text-sm text-gray-600">Oportunidades</p>
             </div>
           </div>
@@ -114,7 +138,7 @@ export function BuyersSection() {
           <div className="flex items-center gap-3">
             <TrendingUp className="h-8 w-8 text-purple-600" />
             <div>
-              <p className="text-2xl font-bold">34</p>
+              <p className="text-2xl font-bold">{stats.proposals}</p>
               <p className="text-sm text-gray-600">Ofertas Recibidas</p>
             </div>
           </div>
@@ -123,7 +147,7 @@ export function BuyersSection() {
           <div className="flex items-center gap-3">
             <Star className="h-8 w-8 text-yellow-600" />
             <div>
-              <p className="text-2xl font-bold">12</p>
+              <p className="text-2xl font-bold">{stats.contracts}</p>
               <p className="text-sm text-gray-600">Contratos Activos</p>
             </div>
           </div>
@@ -195,10 +219,10 @@ export function BuyersSection() {
 
                     {/* Actions */}
                     <div className="flex gap-3">
-                      <Button className="bg-green-600 hover:bg-green-700">
+                      <Button className="bg-green-600 hover:bg-green-700" onClick={() => alert("Por favor selecciona una 'Oportunidad' específica en la otra pestaña para enviar una propuesta a esta empresa.")}>
                         Enviar Propuesta
                       </Button>
-                      <Button variant="outline">Ver Perfil Completo</Button>
+                      <Button variant="outline" onClick={() => navigate(`/profile/${buyer.id}`)}>Ver Perfil Completo</Button>
                     </div>
                   </div>
                 </div>
@@ -261,10 +285,10 @@ export function BuyersSection() {
 
                     {/* Actions */}
                     <div className="flex gap-3">
-                      <Button className="bg-green-600 hover:bg-green-700">
+                      <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleOpenProposal(opp)}>
                         Enviar Cotización
                       </Button>
-                      <Button variant="outline">Más Información</Button>
+                      <Button variant="outline" onClick={() => alert("Detalles adicionales próximamente")}>Más Información</Button>
                     </div>
                   </div>
                 </div>
@@ -288,6 +312,12 @@ export function BuyersSection() {
           </Card>
         </TabsContent>
       </Tabs>
+      <SendProposalDialog
+        isOpen={!!selectedOpportunity}
+        onClose={() => setSelectedOpportunity(null)}
+        opportunity={selectedOpportunity}
+        onSuccess={handleSuccessProposal}
+      />
     </div>
   );
 }

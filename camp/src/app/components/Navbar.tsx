@@ -126,8 +126,8 @@ export function Navbar({ onMenuClick }: NavbarProps) {
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={() => navigate("/feed")}
             >
-              <img src={logo} alt="AgroCore" className="h-10 w-10" />
-              <span className="text-xl font-bold text-green-600 hidden sm:block">AgroCore</span>
+              <img src={logo} alt="CropLink" className="h-10 w-10" />
+              <span className="text-xl font-bold text-green-600 hidden sm:block">CropLink</span>
             </div>
           </div>
 

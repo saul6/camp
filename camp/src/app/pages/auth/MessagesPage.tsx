@@ -44,6 +44,8 @@ export default function MessagesPage() {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
 
+    const [currentTargetUser, setCurrentTargetUser] = useState<Contact | null>(null);
+
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
@@ -66,15 +68,42 @@ export default function MessagesPage() {
     }, [currentUser?.id]);
 
     // Fetch Messages when a contact is selected
+
     useEffect(() => {
-        if (userId && currentUser) {
+        if (userId && currentUser?.id) {
             fetchMessages(userId);
             // Mark as read in UI (optimistically)
             setConversations(prev => prev.map(c =>
                 c.id === Number(userId) ? { ...c, unread_count: 0 } : c
             ));
         }
-    }, [userId]);
+    }, [userId, currentUser?.id]);
+
+    // Find and set the details of the selected user from lists
+    useEffect(() => {
+        if (userId && currentUser) {
+            const selectedConversation = conversations.find(c => c.id === Number(userId)) || contacts.find(c => c.id === Number(userId)) || currentTargetUser;
+
+            if (selectedConversation) {
+                // Only update if it's different to avoid loops (though check by ID is usually enough)
+                if (!currentTargetUser || currentTargetUser.id !== selectedConversation.id) {
+                    setCurrentTargetUser(selectedConversation);
+                }
+            } else {
+                // Fetch details for unknown user if not already set correctly
+                if (!currentTargetUser) {
+                    fetch(`http://localhost:3000/api/users/${userId}?currentUserId=${currentUser.id}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data && !data.message) setCurrentTargetUser(data);
+                        })
+                        .catch(err => console.error("Error fetching target user:", err));
+                }
+            }
+        } else {
+            setCurrentTargetUser(null);
+        }
+    }, [userId, conversations, contacts]);
 
     // Socket Listener for New Messages, Typing, and Read Receipts
     useEffect(() => {
@@ -238,8 +267,7 @@ export default function MessagesPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const selectedConversation = conversations.find(c => c.id === Number(userId)) || contacts.find(c => c.id === Number(userId));
-    const selectedName = selectedConversation ? selectedConversation.name : "Usuario";
+    const selectedName = currentTargetUser ? currentTargetUser.name : "Usuario";
 
     return (
         <div className="h-[calc(100vh-64px)] bg-gray-50 flex flex-col overflow-hidden">

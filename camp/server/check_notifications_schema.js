@@ -1,7 +1,7 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-async function updateSchema() {
+async function checkTable() {
     const connection = await mysql.createConnection({
         host: process.env.DB_HOST || 'localhost',
         user: process.env.DB_USER || 'root',
@@ -10,16 +10,13 @@ async function updateSchema() {
     });
 
     try {
-        await connection.execute(`
-            ALTER TABLE notifications 
-            MODIFY COLUMN type VARCHAR(50) NOT NULL
-        `);
-        console.log('Notifications table type updated to VARCHAR');
+        const [rows] = await connection.execute("SHOW CREATE TABLE notifications");
+        console.log(rows[0]['Create Table']);
     } catch (error) {
-        console.error('Error updating schema:', error);
+        console.error('Error:', error);
     } finally {
         await connection.end();
     }
 }
 
-updateSchema();
+checkTable();

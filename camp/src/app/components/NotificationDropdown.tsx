@@ -84,6 +84,8 @@ export function NotificationDropdown({ unreadCount, userId, navigate }: Notifica
         } else if (notif.type === 'like' || notif.type === 'comment') {
             // navigate to post (needs post view page, for now just feed)
             navigate('/feed');
+        } else if (notif.type === 'product_comment' || notif.type === 'product_reply') {
+            navigate(`/product/${notif.reference_id}`);
         }
     };
 
@@ -150,6 +152,8 @@ export function NotificationDropdown({ unreadCount, userId, navigate }: Notifica
                                         {notif.type === 'comment' && "comentó tu publicación"}
                                         {notif.type === 'follow' && "comenzó a seguirte"}
                                         {notif.type === 'message' && "te envió un mensaje"}
+                                        {notif.type === 'product_comment' && "preguntó en tu producto"}
+                                        {notif.type === 'product_reply' && "respondió a tu pregunta"}
                                     </p>
                                     <p className="text-xs text-gray-400 mt-1">
                                         {new Date(notif.created_at).toLocaleDateString()}

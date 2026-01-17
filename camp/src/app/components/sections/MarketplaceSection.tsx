@@ -1,9 +1,10 @@
-import { ShoppingCart, Star, Filter, Search } from "lucide-react";
+import { ShoppingCart, Star, Filter, Search, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
+import { useNavigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ export function MarketplaceSection() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("featured");
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchProducts();
@@ -155,38 +157,52 @@ export function MarketplaceSection() {
             {filteredProducts
               .filter((p) => p.featured)
               .map((product) => (
-                <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="relative">
-                    <img
-                      src={product.image_url || "https://images.unsplash.com/photo-1595246140625-573b715d11dc?q=80&w=400&auto=format&fit=crop"}
-                      alt={product.name}
-                      className="w-full h-48 object-cover"
-                    />
-                    <Badge className="absolute top-2 right-2 bg-green-600">
-                      Destacado
-                    </Badge>
+                <Card
+                  key={product.id}
+                  className="overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
+                  onClick={() => navigate(`/product/${product.id}`)}
+                >
+                  <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300">
+                        <Store className="h-12 w-12 opacity-50" />
+                      </div>
+                    )}
+                    <div className="absolute top-2 left-2 bg-white/90 text-gray-800 text-xs px-2 py-1 rounded-full backdrop-blur-sm border border-gray-100 shadow-sm">
+                      {product.category}
+                    </div>
+                    {product.featured && (
+                      <Badge className="absolute top-2 right-2 bg-green-600">
+                        Destacado
+                      </Badge>
+                    )}
                   </div>
                   <div className="p-4">
-                    <Badge variant="outline" className="mb-2">
-                      {product.category}
-                    </Badge>
-                    <h3 className="font-semibold text-lg mb-1">{product.name}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{product.seller_name}</p>
+                    <h3 className="font-semibold text-gray-900 line-clamp-1 mb-1">{product.name}</h3>
+                    <p className="text-sm text-gray-500 mb-2">{product.seller_name}</p>
+
                     <div className="flex items-center gap-1 mb-3">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{product.rating || 5.0}</span>
-                      <span className="text-sm text-gray-500">({product.reviews || 0})</span>
+                      <span className="text-yellow-400 text-sm">★</span>
+                      <span className="text-sm font-medium text-gray-900">{product.rating || 5.0}</span>
+                      <span className="text-xs text-gray-400">({product.reviews || 0})</span>
                     </div>
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <p className="text-2xl font-bold text-green-600">
-                          {formatPrice(Number(product.price))}
-                        </p>
-                        <p className="text-xs text-gray-500">{product.unit}</p>
-                      </div>
-                      <Button className="bg-green-600 hover:bg-green-700">
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Comprar
+
+                    <div className="flex items-center justify-between mt-auto">
+                      <p className="text-lg font-bold text-green-600">
+                        {formatPrice(Number(product.price))}
+                        <span className="text-xs text-gray-400 font-normal block md:inline md:ml-1">
+                          / {product.unit}
+                        </span>
+                      </p>
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8">
+                        <ShoppingCart className="h-4 w-4 mr-1" />
+                        Ver
                       </Button>
                     </div>
                   </div>
@@ -210,7 +226,11 @@ export function MarketplaceSection() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProducts.map((product) => (
-              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+              <Card
+                key={product.id}
+                className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => navigate(`/product/${product.id}`)}
+              >
                 <div className="relative">
                   <img
                     src={product.image_url || "https://images.unsplash.com/photo-1595246140625-573b715d11dc?q=80&w=400&auto=format&fit=crop"}
@@ -243,7 +263,7 @@ export function MarketplaceSection() {
                     </div>
                     <Button className="bg-green-600 hover:bg-green-700">
                       <ShoppingCart className="h-4 w-4 mr-2" />
-                      Comprar
+                      Ver
                     </Button>
                   </div>
                 </div>

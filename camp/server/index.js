@@ -135,31 +135,49 @@ async function sendNotification(userId, actorId, type, referenceId) {
 
 // --- ROUTES ---
 
-// 1. REGISTER
+// 1. REGISTER USER
 app.post('/api/auth/register', async (req, res) => {
-    const { name, email, password, profileType } = req.body;
+    const { name, email, password, profileType, companyName, phone, crops } = req.body;
 
     if (!name || !email || !password || !profileType) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios' });
     }
 
     try {
-        // Build hash
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        // Check if user exists
+        const [existingUsers] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ message: 'El usuario ya existe' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         // Insert user
         const [result] = await pool.query(
-            'INSERT INTO users (name, email, password_hash, profile_type) VALUES (?, ?, ?, ?)',
-            [name, email, hashedPassword, profileType]
+            'INSERT INTO users (name, company_name, phone, email, password_hash, profile_type) VALUES (?, ?, ?, ?, ?, ?)',
+            [name, companyName || null, phone || null, email, hashedPassword, profileType]
         );
+        const userId = result.insertId;
 
-        res.status(201).json({ message: 'Usuario registrado exitosamente', userId: result.insertId });
-    } catch (error) {
-        console.error('Error en registro:', error);
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'El correo electrónico ya está registrado' });
+        // Auto-create Buyer Profile for Comercializadoras
+        if (profileType === 'comercializadora') {
+            await pool.query(
+                `INSERT INTO buyer_profiles (user_id, location, verified, rating, reviews_count, volume, seeking_tags) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [userId, 'Ubicación Pendiente', false, 0, 0, 'Volumen Pendiente', JSON.stringify(crops || [])]
+            );
+        } else if (profileType === 'agricola') {
+            await pool.query(
+                `INSERT INTO producer_profiles (user_id, crops, location, hectares) 
+                 VALUES (?, ?, ?, ?)`,
+                [userId, JSON.stringify(crops || []), 'Ubicación Pendiente', 'No especificado']
+            );
         }
+
+        res.status(201).json({ message: 'Usuario registrado exitosamente', userId: userId });
+
+    } catch (error) {
+        console.error('Error in register:', error);
         res.status(500).json({ message: 'Error en el servidor' });
     }
 });
@@ -215,12 +233,22 @@ app.post('/api/auth/login', async (req, res) => {
 // 3. GET PRODUCTS (Feed of "Mi Tienda")
 app.get('/api/products', async (req, res) => {
     try {
-        const [rows] = await pool.query(`
+        const userId = req.query.userId;
+        let query = `
             SELECT p.*, u.name as seller_name, u.profile_type as seller_type 
             FROM products p 
             JOIN users u ON p.user_id = u.id 
-            ORDER BY p.created_at DESC
-        `);
+        `;
+        const params = [];
+
+        if (userId) {
+            query += ' WHERE p.user_id = ?';
+            params.push(userId);
+        }
+
+        query += ' ORDER BY p.created_at DESC';
+
+        const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
         console.error('Error obteniendo productos:', error);
@@ -248,6 +276,132 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
     } catch (error) {
         console.error('Error creando producto:', error);
         res.status(500).json({ message: 'Error al publicar producto' });
+    }
+});
+
+// 4.5 GET SINGLE PRODUCT DETAILS
+app.get('/api/products/:id', async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const [rows] = await pool.query(`
+            SELECT p.*, u.name as seller_name, u.email as seller_email, u.profile_type as seller_type, u.id as seller_id
+            FROM products p 
+            JOIN users u ON p.user_id = u.id 
+            WHERE p.id = ?
+        `, [productId]);
+
+        if (rows.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error obteniendo producto:', error);
+        res.status(500).json({ message: 'Error obteniendo detalles del producto' });
+    }
+});
+
+// 4.6 ADD COMMENT TO PRODUCT
+app.post('/api/products/:id/comments', async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const { userId, content, parentId } = req.body;
+
+        if (!userId || !content) return res.status(400).json({ message: 'Faltan datos' });
+
+        const [result] = await pool.query(
+            'INSERT INTO product_comments (user_id, product_id, content, parent_id) VALUES (?, ?, ?, ?)',
+            [userId, productId, content, parentId || null]
+        );
+
+        // Notify Logic
+        let notifiedUsers = new Set();
+
+        // 1. Check for @Mentions (Case insensitive, accents)
+        // Capture up to 2 words after @. Matches "Name" or "Name Surname"
+        const mentionMatch = content.match(/@([a-zA-Z0-9À-ÿ]+(?: [a-zA-Z0-9À-ÿ]+)?)/);
+        if (mentionMatch) {
+            const mentionedName = mentionMatch[1].trim();
+            console.log(`[NOTIF] Checking mention for: '${mentionedName}'`);
+
+            const [mentionedUser] = await pool.query('SELECT id FROM users WHERE name = ?', [mentionedName]);
+            if (mentionedUser.length > 0) {
+                const targetId = mentionedUser[0].id;
+                if (targetId !== userId) {
+                    await sendNotification(targetId, userId, 'product_reply', productId);
+                    notifiedUsers.add(targetId);
+                    console.log(`[NOTIF] Sent mention notification to user ${targetId}`);
+                }
+            } else {
+                console.log(`[NOTIF] User '${mentionedName}' not found`);
+            }
+        }
+
+        // 2. Notify Parent Author (if exists and wasn't just notified)
+        if (parentId) {
+            const [parentComment] = await pool.query('SELECT user_id FROM product_comments WHERE id = ?', [parentId]);
+            if (parentComment.length > 0) {
+                const parentAuthorId = parentComment[0].user_id;
+                if (parentAuthorId !== userId && !notifiedUsers.has(parentAuthorId)) {
+                    await sendNotification(parentAuthorId, userId, 'product_reply', productId);
+                    notifiedUsers.add(parentAuthorId);
+                    console.log(`[NOTIF] Sent reply notification to parent author ${parentAuthorId}`);
+                }
+            }
+        }
+
+        // 3. Notify Seller (if it's a root comment, or maybe even if it's a reply but seller wants to know?)
+        // Usually seller wants to know only if it's a direct question (root) or if they are mentioned/replied to.
+        // Let's stick to: Root comment -> Notify Seller.
+        if (!parentId) {
+            const [product] = await pool.query('SELECT user_id FROM products WHERE id = ?', [productId]);
+            if (product.length > 0) {
+                const sellerId = product[0].user_id;
+                if (sellerId !== userId && !notifiedUsers.has(sellerId)) {
+                    await sendNotification(sellerId, userId, 'product_comment', productId);
+                    console.log(`[NOTIF] Sent new question notification to seller ${sellerId}`);
+                }
+            }
+        }
+
+
+        // --- NEW: Real-time Comment Update ---
+        // Fetch the inserted comment with user details to broadcast it
+        const [newCommentData] = await pool.query(`
+            SELECT c.*, u.name as user_name 
+            FROM product_comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.id = ?
+        `, [result.insertId]);
+
+        if (newCommentData.length > 0) {
+            io.emit('new_comment', {
+                productId: productId,
+                comment: newCommentData[0]
+            });
+            console.log(`[SOCKET] Broadcasted new_comment for product ${productId}`);
+        }
+        // -------------------------------------
+
+        res.status(201).json({ message: 'Comentario enviado', commentId: result.insertId });
+    } catch (error) {
+        console.error('Error comentando producto:', error);
+        res.status(500).json({ message: 'Error al enviar comentario' });
+    }
+});
+
+// 4.7 GET PRODUCT COMMENTS
+app.get('/api/products/:id/comments', async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const [rows] = await pool.query(`
+            SELECT c.*, u.name as user_name 
+            FROM product_comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.product_id = ?
+            ORDER BY c.created_at ASC
+        `, [productId]);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error obteniendo comentarios de producto:', error);
+        res.status(500).json({ message: 'Error obteniendo preguntas' });
     }
 });
 
@@ -340,21 +494,51 @@ app.post('/api/posts/:id/like', async (req, res) => {
 // 8. COMMENT ON POST
 app.post('/api/posts/:id/comments', async (req, res) => {
     const postId = req.params.id;
-    const { userId, content } = req.body;
+    const { userId, content, parentId } = req.body;
 
     if (!content) return res.status(400).json({ message: 'Comentario vacío' });
 
     try {
         const [result] = await pool.query(
-            'INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)',
-            [userId, postId, content]
+            'INSERT INTO comments (user_id, post_id, content, parent_id) VALUES (?, ?, ?, ?)',
+            [userId, postId, content, parentId || null]
         );
 
         // NOTIFICATION
-        // Get post owner
+        if (parentId) {
+            // It's a reply, notify the author of the parent comment
+            const [parentComment] = await pool.query('SELECT user_id FROM comments WHERE id = ?', [parentId]);
+            if (parentComment.length > 0) {
+                const parentAuthorId = parentComment[0].user_id;
+                if (parentAuthorId !== userId) {
+                    sendNotification(parentAuthorId, userId, 'reply', postId); // 'reply' type for post comments replies? Or reuse 'product_reply'? 
+                    // Let's use 'comment_reply' or just generic 'reply' if the frontend handles it. 
+                    // Previously we used 'product_reply'. For posts, maybe 'post_reply'?
+                    // Looking at NotificationDropdown.tsx might be needed, but for now let's stick to 'comment' or add 'post_reply'
+                }
+            }
+        }
+
+        // Notify post owner logic (always or only if root?) 
+        // Usually, post owner wants to know about all comments on their post.
         const [post] = await pool.query('SELECT user_id FROM posts WHERE id = ?', [postId]);
         if (post.length > 0) {
-            sendNotification(post[0].user_id, userId, 'comment', postId);
+            const postOwnerId = post[0].user_id;
+            // Don't notify if I am the owner
+            if (postOwnerId !== userId) {
+                // Check if we already notified this user as a parent author
+                let alreadyNotified = false;
+                if (parentId) {
+                    const [parentComment] = await pool.query('SELECT user_id FROM comments WHERE id = ?', [parentId]);
+                    if (parentComment.length > 0 && parentComment[0].user_id === postOwnerId) {
+                        alreadyNotified = true;
+                    }
+                }
+
+                if (!alreadyNotified) {
+                    sendNotification(postOwnerId, userId, 'comment', postId);
+                }
+            }
         }
 
         res.status(201).json({ message: 'Comentario agregado', commentId: result.insertId });
@@ -367,18 +551,72 @@ app.post('/api/posts/:id/comments', async (req, res) => {
 // 9. GET COMMENTS
 app.get('/api/posts/:id/comments', async (req, res) => {
     const postId = req.params.id;
+    const currentUserId = req.query.userId || 0;
     try {
         const [rows] = await pool.query(`
-            SELECT c.*, u.name as author_name 
+            SELECT 
+                c.*, 
+                u.name as author_name,
+                (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = c.id) as likes_count,
+                (SELECT COUNT(*) > 0 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = ?) as is_liked
             FROM comments c 
             JOIN users u ON c.user_id = u.id 
             WHERE c.post_id = ? 
             ORDER BY c.created_at ASC
-        `, [postId]);
-        res.json(rows);
+        `, [currentUserId, postId]);
+
+        // Convert is_liked to boolean (MySQL returns 1/0)
+        const comments = rows.map(c => ({
+            ...c,
+            is_liked: !!c.is_liked
+        }));
+
+        res.json(comments);
     } catch (error) {
         console.error('Error getting comments:', error);
         res.status(500).json({ message: 'Error obteniendo comentarios' });
+    }
+});
+
+// LIKE COMMENT
+app.post('/api/comments/:id/like', async (req, res) => {
+    const commentId = req.params.id;
+    const { userId } = req.body;
+
+    try {
+        // Check if already liked
+        const [existing] = await pool.query(
+            'SELECT * FROM comment_likes WHERE user_id = ? AND comment_id = ?',
+            [userId, commentId]
+        );
+
+        let liked = false;
+        if (existing.length > 0) {
+            // Unlike
+            await pool.query(
+                'DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?',
+                [userId, commentId]
+            );
+        } else {
+            // Like
+            await pool.query(
+                'INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)',
+                [userId, commentId]
+            );
+            liked = true;
+
+            // Notification
+            const [commentRows] = await pool.query('SELECT user_id FROM comments WHERE id = ?', [commentId]);
+            if (commentRows.length > 0) {
+                const commentAuthorId = commentRows[0].user_id;
+                sendNotification(commentAuthorId, userId, 'like_comment', commentId);
+            }
+        }
+
+        res.json({ liked });
+    } catch (error) {
+        console.error('Error liking comment:', error);
+        res.status(500).json({ message: 'Error dando like al comentario' });
     }
 });
 
@@ -413,6 +651,123 @@ app.get('/api/users', async (req, res) => {
     } catch (error) {
         console.error('Error getting users:', error);
         res.status(500).json({ message: 'Error obteniendo usuarios' });
+    }
+});
+
+// 10.5. GET BUYERS DIRECTORY
+app.get('/api/buyers', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                u.id, u.name, u.profile_type as type, 
+                bp.location, bp.rating, bp.reviews_count as reviews, 
+                bp.volume, bp.seeking_tags, bp.verified
+            FROM users u
+            JOIN buyer_profiles bp ON u.id = bp.user_id
+            WHERE u.profile_type = 'Comercializadora'
+        `);
+
+        const buyers = rows.map(b => ({
+            ...b,
+            seeking: b.seeking_tags ? JSON.parse(b.seeking_tags) : [],
+            verified: !!b.verified,
+            rating: parseFloat(b.rating)
+        }));
+
+        res.json(buyers);
+    } catch (error) {
+        console.error('Error fetching buyers:', error);
+        res.status(500).json({ message: 'Error obteniendo compradores' });
+    }
+});
+
+// 10.6 GET OPPORTUNITIES
+app.get('/api/opportunities', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                o.id, o.product_name as product, o.quantity, o.price, o.deadline, o.requirements,
+                u.name as buyer
+            FROM opportunities o
+            JOIN users u ON o.user_id = u.id
+            WHERE o.status = 'active'
+        `);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching opportunities:', error);
+        res.status(500).json({ message: 'Error obteniendo oportunidades' });
+    }
+});
+
+// 10.7 GET MARKET STATS
+app.get('/api/market/stats', async (req, res) => {
+    const userId = req.query.userId;
+    try {
+        // Global Market Stats
+        const [buyers] = await pool.query('SELECT COUNT(*) as count FROM users WHERE profile_type="Comercializadora"');
+        const [opportunities] = await pool.query('SELECT COUNT(*) as count FROM opportunities WHERE status="active"');
+
+        // User Specific Stats
+        let proposalsCount = 0;
+        let contractsCount = 0;
+
+        if (userId) {
+            const [proposals] = await pool.query('SELECT COUNT(*) as count FROM proposals WHERE seller_id = ?', [userId]);
+            const [contracts] = await pool.query('SELECT COUNT(*) as count FROM contracts WHERE seller_id = ? AND status="active"', [userId]);
+            proposalsCount = proposals[0].count;
+            contractsCount = contracts[0].count;
+        }
+
+        res.json({
+            buyers: buyers[0].count,
+            opportunities: opportunities[0].count,
+            proposals: proposalsCount,
+            contracts: contractsCount
+        });
+    } catch (error) {
+        console.error('Error fetching market stats:', error);
+        res.status(500).json({ message: 'Error obteniendo estadisticas de mercado' });
+    }
+});
+
+// 10.8 CREATE PROPOSAL
+app.post('/api/proposals', async (req, res) => {
+    console.log('Received POST /api/proposals');
+    console.log('Body:', req.body);
+
+    const { opportunityId, sellerId, price, message, quantityOffered, quality, deliveryDate, paymentTerms, transportIncluded } = req.body;
+
+    if (!opportunityId || !sellerId || !price) {
+        console.log('Missing required fields');
+        return res.status(400).json({ message: 'Faltan datos requeridos (opportunityId, sellerId, price)' });
+    }
+
+    try {
+        console.log('Executing INSERT query...');
+        // 1. Create Proposal
+        const [result] = await pool.query(
+            `INSERT INTO proposals 
+            (opportunity_id, seller_id, price, quantity_offered, quality, delivery_date, payment_terms, transport_included, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [opportunityId, sellerId, price, quantityOffered || null, quality || null, deliveryDate || null, paymentTerms || null, transportIncluded ? 1 : 0, 'pending']
+        );
+        console.log('Insert success. ID:', result.insertId);
+        const proposalId = result.insertId;
+
+        // 2. Notify Buyer (Opportunity Owner)
+        // Get buyerId from opportunity
+        const [opps] = await pool.query('SELECT user_id, product_name FROM opportunities WHERE id = ?', [opportunityId]);
+        if (opps.length > 0) {
+            const buyerId = opps[0].user_id;
+            sendNotification(buyerId, sellerId, 'proposal_received', proposalId);
+        }
+
+        res.status(201).json({ message: 'Propuesta enviada exitosamente', id: proposalId });
+
+    } catch (error) {
+        console.error('Error creating proposal:', error); // This log is crucial
+        console.error('SQL Message:', error.sqlMessage);
+        res.status(500).json({ message: 'Error enviando propuesta: ' + error.message }); // Return error to client for visibility
     }
 });
 
