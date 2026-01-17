@@ -855,9 +855,22 @@ app.get('/api/users/:id', async (req, res) => {
 
     try {
         // Get Basic Info
-        const [users] = await pool.query('SELECT id, name, email, profile_type FROM users WHERE id = ?', [targetUserId]);
+        const [users] = await pool.query('SELECT id, name, email, profile_type, phone, company_name FROM users WHERE id = ?', [targetUserId]);
         if (users.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
         const user = users[0];
+
+        // Fetch Extended Profile Info
+        if (user.profile_type === 'comercializadora') {
+            const [details] = await pool.query('SELECT location, volume, seeking_tags, verified, rating, reviews_count FROM buyer_profiles WHERE user_id = ?', [targetUserId]);
+            if (details.length > 0) {
+                Object.assign(user, details[0]);
+            }
+        } else if (user.profile_type === 'agricola') {
+            const [details] = await pool.query('SELECT location, hectares, crops FROM producer_profiles WHERE user_id = ?', [targetUserId]);
+            if (details.length > 0) {
+                Object.assign(user, details[0]);
+            }
+        }
 
         // Get Stats
         const [followers] = await pool.query('SELECT COUNT(*) as count FROM connections WHERE following_id = ?', [targetUserId]);
@@ -886,6 +899,62 @@ app.get('/api/users/:id', async (req, res) => {
     } catch (error) {
         console.error('Error getting user details:', error);
         res.status(500).json({ message: 'Error obteniendo detalles del usuario' });
+    }
+});
+
+// 14.5 UPDATE USER PROFILE
+app.put('/api/users/:id', async (req, res) => {
+    const userId = req.params.id;
+    const { name, location, volume, seeking_tags, crops, hectares } = req.body;
+
+    try {
+        // Update basic user info
+        await pool.query('UPDATE users SET name = ? WHERE id = ?', [name, userId]);
+
+        // Get profile type to know which table to update
+        const [users] = await pool.query('SELECT profile_type FROM users WHERE id = ?', [userId]);
+        if (users.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
+
+        const profileType = users[0].profile_type;
+
+        if (profileType === 'comercializadora') {
+            // Check if profile exists
+            const [exists] = await pool.query('SELECT 1 FROM buyer_profiles WHERE user_id = ?', [userId]);
+            const tags = Array.isArray(seeking_tags) ? JSON.stringify(seeking_tags) : seeking_tags;
+
+            if (exists.length > 0) {
+                await pool.query(
+                    'UPDATE buyer_profiles SET location = ?, volume = ?, seeking_tags = ? WHERE user_id = ?',
+                    [location, volume, tags, userId]
+                );
+            } else {
+                await pool.query(
+                    'INSERT INTO buyer_profiles (user_id, location, volume, seeking_tags) VALUES (?, ?, ?, ?)',
+                    [userId, location, volume, tags]
+                );
+            }
+        } else if (profileType === 'agricola') {
+            // Check if profile exists
+            const [exists] = await pool.query('SELECT 1 FROM producer_profiles WHERE user_id = ?', [userId]);
+            const cropsJson = Array.isArray(crops) ? JSON.stringify(crops) : crops;
+
+            if (exists.length > 0) {
+                await pool.query(
+                    'UPDATE producer_profiles SET location = ?, hectares = ?, crops = ? WHERE user_id = ?',
+                    [location, hectares, cropsJson, userId]
+                );
+            } else {
+                await pool.query(
+                    'INSERT INTO producer_profiles (user_id, location, hectares, crops) VALUES (?, ?, ?, ?)',
+                    [userId, location, hectares, cropsJson]
+                );
+            }
+        }
+
+        res.json({ message: 'Perfil actualizado exitosamente' });
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).json({ message: 'Error actualizando el perfil' });
     }
 });
 

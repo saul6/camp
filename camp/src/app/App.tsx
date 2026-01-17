@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
-import { AuthLayout } from "./layouts/AuthLayout";
+
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
@@ -22,9 +22,7 @@ export default function App() {
         {/* Auth Routes */}
         {/* Auth Routes */}
         <Route path="/register" element={<RegisterPage />} />
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginPage />} />
-        </Route>
+        <Route path="/login" element={<LoginPage />} />
 
         {/* Protected Dashboard Routes */}
         <Route element={<DashboardLayout />}>

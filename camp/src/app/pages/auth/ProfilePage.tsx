@@ -143,6 +143,78 @@ export default function ProfilePage() {
         }
     };
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editFormData, setEditFormData] = useState({
+        location: "",
+        volume: "",
+        seeking_tags: "",
+    });
+
+    useEffect(() => {
+        if (profileUser) {
+            let tags = "";
+            try {
+                const rawTags = (profileUser as any).seeking_tags;
+                if (Array.isArray(rawTags)) tags = rawTags.join(", ");
+                else if (typeof rawTags === 'string' && rawTags.startsWith('[')) tags = JSON.parse(rawTags).join(", ");
+                else tags = rawTags || "";
+            } catch (e) { tags = (profileUser as any).seeking_tags || ""; }
+
+            setEditFormData({
+                location: (profileUser as any).location || "",
+                volume: (profileUser as any).volume || "",
+                seeking_tags: tags,
+            });
+        }
+    }, [profileUser]);
+
+    const handleSaveProfile = async () => {
+        if (!profileUser) return;
+        try {
+            const seekingTagsArray = editFormData.seeking_tags.split(',').map(s => s.trim()).filter(Boolean);
+
+            const res = await fetch(`http://localhost:3000/api/users/${profileUser.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: profileUser.name,
+                    location: editFormData.location,
+                    volume: editFormData.volume,
+                    seeking_tags: seekingTagsArray
+                })
+            });
+
+            if (res.ok) {
+                setIsEditing(false);
+                fetchData(); // Reload data
+            }
+        } catch (err) {
+            console.error("Error updating profile:", err);
+        }
+    };
+
+    // Helper to render tags
+    const renderTags = (tags: any) => {
+        let tagArray: string[] = [];
+        try {
+            if (Array.isArray(tags)) tagArray = tags;
+            else if (typeof tags === 'string' && tags.startsWith('[')) tagArray = JSON.parse(tags);
+            else if (typeof tags === 'string') tagArray = [tags];
+        } catch (e) { return null; }
+
+        if (tagArray.length === 0) return <span className="text-gray-500 italic">No especificado</span>;
+
+        return (
+            <div className="flex flex-wrap gap-2 mt-1">
+                {tagArray.map((tag, i) => (
+                    <span key={i} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full border border-green-200">
+                        {tag}
+                    </span>
+                ))}
+            </div>
+        );
+    };
+
     if (loading) {
         return <div className="min-h-screen flex items-center justify-center">Cargando perfil...</div>;
     }
@@ -160,7 +232,6 @@ export default function ProfilePage() {
                 <div className="max-w-7xl mx-auto">
                     {/* Cover Photo */}
                     <div className="relative h-64 md:h-80 w-full rounded-b-xl overflow-hidden bg-gradient-to-r from-green-600 to-emerald-800">
-                        {/* Placeholder for actual cover image */}
                         <div className="absolute inset-0 flex items-center justify-center text-white/30 font-bold text-4xl select-none">
                             AgroCore
                         </div>
@@ -195,7 +266,9 @@ export default function ProfilePage() {
                                 <h1 className="text-3xl font-bold text-gray-900">{profileUser.name}</h1>
 
                                 <div className="flex items-center gap-4 text-gray-600 font-medium mt-1">
-                                    <span className="capitalize">{profileUser.profile_type}</span>
+                                    <span className="capitalize px-2 py-0.5 bg-gray-100 rounded text-sm border border-gray-200">
+                                        {profileUser.profile_type}
+                                    </span>
                                     <span>•</span>
                                     <button onClick={() => setShowFollowers(true)} className="hover:underline cursor-pointer hover:text-green-700">
                                         <strong>{profileUser.followersCount}</strong> seguidores
@@ -204,11 +277,6 @@ export default function ProfilePage() {
                                     <button onClick={() => setShowFollowing(true)} className="hover:underline cursor-pointer hover:text-green-700">
                                         <strong>{profileUser.followingCount}</strong> seguidos
                                     </button>
-                                </div>
-
-                                {/* Avatar Group Mockup (Friends/Connections) */}
-                                <div className="flex -space-x-2 mt-2">
-                                    {/* Placeholder avatars could go here */}
                                 </div>
                             </div>
 
@@ -233,15 +301,26 @@ export default function ProfilePage() {
                             {/* Action Buttons */}
                             <div className="flex items-center gap-3 mt-4 md:mt-0 md:mb-6 w-full md:w-auto">
                                 {isOwner ? (
-                                    <>
-                                        <Button className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 gap-2">
-                                            <Edit className="h-4 w-4" />
-                                            Editar perfil
-                                        </Button>
-                                        <Button variant="secondary" className="flex-1 md:flex-none bg-gray-200 hover:bg-gray-300 text-gray-900">
-                                            Promocionar
-                                        </Button>
-                                    </>
+                                    isEditing ? (
+                                        <>
+                                            <Button onClick={handleSaveProfile} className="bg-green-600 hover:bg-green-700 gap-2">
+                                                Guardar Cambios
+                                            </Button>
+                                            <Button variant="ghost" onClick={() => setIsEditing(false)} className="bg-gray-200 hover:bg-gray-300">
+                                                Cancelar
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 gap-2">
+                                                <Edit className="h-4 w-4" />
+                                                Editar perfil
+                                            </Button>
+                                            <Button variant="secondary" className="flex-1 md:flex-none bg-gray-200 hover:bg-gray-300 text-gray-900">
+                                                Promocionar
+                                            </Button>
+                                        </>
+                                    )
                                 ) : (
                                     <>
                                         <Button
@@ -296,29 +375,78 @@ export default function ProfilePage() {
                                 <CardTitle className="text-xl font-bold">Detalles</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex items-center gap-3 text-gray-700">
-                                    <MapPin className="h-5 w-5 text-gray-400" />
-                                    <span>Vive en <span className="font-semibold">Guadalajara, Jalisco</span></span>
+                                {/* Location */}
+                                <div className="flex items-start gap-3 text-gray-700">
+                                    <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
+                                    <div className="flex-1">
+                                        <span className="block font-semibold text-xs text-gray-500 uppercase mb-0.5">Ubicación</span>
+                                        {isEditing ? (
+                                            <Input
+                                                value={editFormData.location}
+                                                onChange={e => setEditFormData({ ...editFormData, location: e.target.value })}
+                                                placeholder="Ej. Guadalajara, Jalisco"
+                                                className="h-8 text-sm"
+                                            />
+                                        ) : (
+                                            <span>{(profileUser as any).location || 'No especificada'}</span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3 text-gray-700">
-                                    <Globe className="h-5 w-5 text-gray-400" />
-                                    <span>De <span className="font-semibold">Michoacán, México</span></span>
-                                </div>
+
+                                {/* Join Date (Static) */}
                                 <div className="flex items-center gap-3 text-gray-700">
                                     <Calendar className="h-5 w-5 text-gray-400" />
                                     <span>Se unió en Enero 2024</span>
                                 </div>
 
-                                {isOwner && (
+                                {/* Buyer Specific Fields */}
+                                {profileUser.profile_type === 'comercializadora' && (
                                     <>
-                                        <Button variant="outline" className="w-full bg-gray-100 hover:bg-gray-200 border-none text-gray-900 font-semibold mt-2">
-                                            Editar detalles
-                                        </Button>
-                                        <Button variant="outline" className="w-full bg-gray-100 hover:bg-gray-200 border-none text-gray-900 font-semibold">
-                                            Agregar pasatiempos
-                                        </Button>
+                                        <Separator className="my-2" />
+
+                                        {/* Volume */}
+                                        <div className="flex items-start gap-3 text-gray-700">
+                                            <Globe className="h-5 w-5 text-gray-400 mt-0.5" />
+                                            <div className="flex-1">
+                                                <span className="block font-semibold text-xs text-gray-500 uppercase mb-0.5">Volumen de Compra</span>
+                                                {isEditing ? (
+                                                    <Input
+                                                        value={editFormData.volume}
+                                                        onChange={e => setEditFormData({ ...editFormData, volume: e.target.value })}
+                                                        placeholder="Ej. 50 toneladas mensuales"
+                                                        className="h-8 text-sm"
+                                                    />
+                                                ) : (
+                                                    <span className="font-medium text-purple-700 block bg-purple-50 px-2 py-1 rounded inline-block w-full border border-purple-100">
+                                                        {(profileUser as any).volume || 'No especificado'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Products Seeking */}
+                                        <div className="flex items-start gap-3 text-gray-700">
+                                            <Smile className="h-5 w-5 text-gray-400 mt-0.5" />
+                                            <div className="flex-1">
+                                                <span className="block font-semibold text-xs text-gray-500 uppercase mb-0.5">Productos de Interés</span>
+                                                {isEditing ? (
+                                                    <div className="space-y-1">
+                                                        <Input
+                                                            value={editFormData.seeking_tags}
+                                                            onChange={e => setEditFormData({ ...editFormData, seeking_tags: e.target.value })}
+                                                            placeholder="Separa con comas (Ej. Fresas, Maíz)"
+                                                            className="h-8 text-sm"
+                                                        />
+                                                        <p className="text-[10px] text-gray-500">Separa los productos con comas.</p>
+                                                    </div>
+                                                ) : (
+                                                    renderTags((profileUser as any).seeking_tags)
+                                                )}
+                                            </div>
+                                        </div>
                                     </>
                                 )}
+
                             </CardContent>
                         </Card>
 
