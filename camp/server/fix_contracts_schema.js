@@ -9,18 +9,18 @@ const dbConfig = {
     database: process.env.DB_NAME || 'agrocore'
 };
 
-async function checkSchema() {
+async function fixContractsSchema() {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.query('DESCRIBE buyer_profiles');
-        console.log("--- BUYER PROFILES ---");
-        console.log(JSON.stringify(rows.map(r => ({ Field: r.Field, Type: r.Type })), null, 2));
+        console.log("Adding price and quantity to contracts...");
+        await connection.query("ALTER TABLE contracts ADD COLUMN price decimal(10,2), ADD COLUMN quantity VARCHAR(255)");
+        console.log("Schema updated successfully.");
     } catch (error) {
-        console.error(error);
+        console.error("Schema Update Failed:", error);
     } finally {
         if (connection) await connection.end();
     }
 }
 
-checkSchema();
+fixContractsSchema();

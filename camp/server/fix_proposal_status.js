@@ -9,13 +9,13 @@ const dbConfig = {
     database: process.env.DB_NAME || 'agrocore'
 };
 
-async function checkSchema() {
+async function fixSchema() {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.query('DESCRIBE buyer_profiles');
-        console.log("--- BUYER PROFILES ---");
-        console.log(JSON.stringify(rows.map(r => ({ Field: r.Field, Type: r.Type })), null, 2));
+        console.log("Updating proposals status column...");
+        await connection.query("ALTER TABLE proposals MODIFY COLUMN status ENUM('pending', 'accepted', 'rejected', 'negotiating', 'countered') DEFAULT 'pending'");
+        console.log("Schema updated successfully.");
     } catch (error) {
         console.error(error);
     } finally {
@@ -23,4 +23,4 @@ async function checkSchema() {
     }
 }
 
-checkSchema();
+fixSchema();

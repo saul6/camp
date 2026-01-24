@@ -187,7 +187,7 @@ export function EventsSection() {
                 ¿Organizas un evento agrícola?
               </h3>
               <p className="text-gray-600 mb-4">
-                Publica tu evento en AgroLink y llega a miles de productores
+                Publica tu evento en CropLink y llega a miles de productores
               </p>
               <Button className="bg-green-600 hover:bg-green-700">
                 Crear Evento

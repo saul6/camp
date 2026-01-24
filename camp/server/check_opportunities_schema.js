@@ -13,8 +13,8 @@ async function checkSchema() {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.query('DESCRIBE buyer_profiles');
-        console.log("--- BUYER PROFILES ---");
+        const [rows] = await connection.query('DESCRIBE opportunities');
+        console.log('--- OPPORTUNITIES ---');
         console.log(JSON.stringify(rows.map(r => ({ Field: r.Field, Type: r.Type })), null, 2));
     } catch (error) {
         console.error(error);

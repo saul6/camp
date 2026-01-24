@@ -9,13 +9,13 @@ const dbConfig = {
     database: process.env.DB_NAME || 'agrocore'
 };
 
-async function checkSchema() {
+async function checkContracts() {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.query('DESCRIBE buyer_profiles');
-        console.log("--- BUYER PROFILES ---");
-        console.log(JSON.stringify(rows.map(r => ({ Field: r.Field, Type: r.Type })), null, 2));
+        const [rows] = await connection.query('SELECT * FROM contracts');
+        console.log("Contracts found:", rows.length);
+        console.log(JSON.stringify(rows, null, 2));
     } catch (error) {
         console.error(error);
     } finally {
@@ -23,4 +23,4 @@ async function checkSchema() {
     }
 }
 
-checkSchema();
+checkContracts();

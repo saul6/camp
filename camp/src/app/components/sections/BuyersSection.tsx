@@ -4,8 +4,13 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { SendProposalDialog } from "../dialogs/SendProposalDialog";
+
+import { ProposalsListDialog } from "../ProposalsListDialog";
+import { ContractsListDialog } from "../ContractsListDialog";
+import { CreateOpportunityDialog } from "../CreateOpportunityDialog";
+import { Trash, EyeOff, Plus } from "lucide-react";
 
 interface Buyer {
   id: number;
@@ -24,37 +29,55 @@ interface Opportunity {
   buyer: string;
   product: string;
   quantity: string;
+  quality?: string;
   price: string;
   deadline: string;
   requirements: string;
+  status?: string;
 }
 
 export function BuyersSection() {
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [myOpportunities, setMyOpportunities] = useState<Opportunity[]>([]);
   const [stats, setStats] = useState({ buyers: 0, opportunities: 0, proposals: 0, contracts: 0 });
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [showProposals, setShowProposals] = useState(false);
+  const [showContracts, setShowContracts] = useState(false);
+  const [showCreateOpp, setShowCreateOpp] = useState(false);
   const navigate = useNavigate();
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserId = currentUser.id;
+
+  console.log('CurrentUser:', currentUser);
+  const type = currentUser.profile_type || currentUser.profileType || '';
+  const isBuyer = type.toString().toLowerCase() === 'comercializadora';
 
   const fetchData = async () => {
     try {
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const userId = currentUser.id;
-
-      const [buyersRes, oppsRes, statsRes] = await Promise.all([
+      const promises = [
         fetch('http://localhost:3000/api/buyers'),
         fetch('http://localhost:3000/api/opportunities'),
-        fetch(`http://localhost:3000/api/market/stats?userId=${userId || ''}`)
-      ]);
+        fetch(`http://localhost:3000/api/market/stats?userId=${currentUserId || ''}`)
+      ];
 
-      const buyersData = await buyersRes.json();
-      const oppsData = await oppsRes.json();
-      const statsData = await statsRes.json();
+      if (isBuyer) {
+        promises.push(fetch(`http://localhost:3000/api/opportunities?userId=${currentUserId}`));
+      }
+
+      const results = await Promise.all(promises);
+
+      const buyersData = await results[0].json();
+      const oppsData = await results[1].json();
+      const statsData = await results[2].json();
+      const myOppsData = isBuyer && results[3] ? await results[3].json() : [];
 
       setBuyers(buyersData);
       setOpportunities(oppsData);
       setStats(statsData);
+      setMyOpportunities(myOppsData);
       setLoading(false);
     } catch (err) {
       console.error("Error loading data:", err);
@@ -74,34 +97,17 @@ export function BuyersSection() {
     fetchData(); // Refresh stats
   };
 
-  // Helper to create a fake opportunity from a Buyer profile for the generic 'Enviar Propuesta' button
-  const handleBuyerProposal = (buyer: Buyer) => {
-    // This is a bit of a hack since 'Enviar Propuesta' on a Buyer card doesn't have a specific product context.
-    // For now, let's assume it picks their first seeking tag if available, or 'General'.
-    const Product = buyer.seeking[0] || 'General';
-    const fakeOpp: Opportunity = {
-      id: 0, // 0 indicates a direct proposal not linked to a specific opportunity record yet? Or we need logic for this.
-      // Actually, for MVP let's redirect them to the first opportunity of this buyer if exists, or show a 'Not available' message.
-      // Or better: Create a generic opportunity mode.
-      // Let's keep it simple: The 'Enviar Propuesta' on Buyer Card might just open the dialog with pre-filled Buyer Name
-      // We need to support 'buyerId' in the backend if opportunityId is missing?
-      // Wait, backend requires opportunityId.
-      // Let's make the button navigate to their profile for now, or alert 'Select an opportunity from the Opportunities tab'.
-      // User asked for "Funcionales".
-      // Let's direct them to the "Oportunidades" tab filtering by this buyer?
-      // OR: Just alert "Ve a la pestaña Oportunidades para ver que necesita".
-      buyer: buyer.name,
-      product: Product,
-      quantity: 'N/A',
-      price: 'N/A',
-      deadline: 'N/A',
-      requirements: 'Propuesta Directa'
-    } as any; // Cast to avoid strict check on missing fields like id if we allow fake.
-
-    // BUT: The backend requires opportunity_id. We can't send a proposal without an opportunity_id.
-    // Let's disable this button on the Buyer Card for now OR make it scroll to Opportunities.
-    // Let's implement the "Ver Perfil Completo" first.
-    navigate(`/profile/${buyer.id}`);
+  const handleStatusChange = async (id: number, status: string) => {
+    try {
+      await fetch(`http://localhost:3000/api/opportunities/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando compradores...</div>;
@@ -109,9 +115,16 @@ export function BuyersSection() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Compradores</h1>
-        <p className="text-gray-600">Conecta con empresas que buscan tus productos</p>
+      <div className="mb-6 flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Compradores</h1>
+          <p className="text-gray-600">Conecta con empresas que buscan tus productos</p>
+        </div>
+        {isBuyer && (
+          <Button onClick={() => setShowCreateOpp(true)} className="bg-green-600 hover:bg-green-700 gap-2">
+            <Plus className="h-4 w-4" /> Publicar Oferta
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -134,7 +147,7 @@ export function BuyersSection() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setShowProposals(true)}>
           <div className="flex items-center gap-3">
             <TrendingUp className="h-8 w-8 text-purple-600" />
             <div>
@@ -143,7 +156,7 @@ export function BuyersSection() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setShowContracts(true)}>
           <div className="flex items-center gap-3">
             <Star className="h-8 w-8 text-yellow-600" />
             <div>
@@ -155,10 +168,11 @@ export function BuyersSection() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="buyers" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+      <Tabs defaultValue={isBuyer ? "my-offers" : "buyers"} className="w-full">
+        <TabsList className={`grid w-full ${isBuyer ? 'grid-cols-3' : 'grid-cols-2'} mb-6`}>
           <TabsTrigger value="buyers">Directorio de Compradores</TabsTrigger>
           <TabsTrigger value="opportunities">Oportunidades de Venta</TabsTrigger>
+          {isBuyer && <TabsTrigger value="my-offers">Mis Ofertas</TabsTrigger>}
         </TabsList>
 
         {/* Directorio de Compradores */}
@@ -311,12 +325,74 @@ export function BuyersSection() {
             </div>
           </Card>
         </TabsContent>
+
+        {/* Mis Ofertas */}
+        {isBuyer && (
+          <TabsContent value="my-offers">
+            <div className="space-y-4">
+              {myOpportunities.length > 0 ? myOpportunities.map((opp) => (
+                <Card key={opp.id} className="p-6 border-l-4 border-l-blue-500">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <Badge className={opp.status === 'active' ? 'bg-green-600 mb-2' : 'bg-gray-400 mb-2'}>
+                            {opp.status === 'active' ? 'Publicada' : 'Cerrada'}
+                          </Badge>
+                          <h3 className="text-xl font-semibold mb-1">{opp.product}</h3>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleStatusChange(opp.id, opp.status === 'active' ? 'closed' : 'active')} title="Cambiar Estado">
+                            <EyeOff className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => alert("Función eliminar pendientes")} title="Eliminar">
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div><p className="text-gray-500">Precio</p><p className="font-semibold">${opp.price}</p></div>
+                        <div><p className="text-gray-500">Cantidad</p><p className="font-semibold">{opp.quantity}</p></div>
+                        <div><p className="text-gray-500">Calidad</p><p className="font-semibold">{opp.quality || 'N/A'}</p></div>
+                        <div><p className="text-gray-500">Plazo</p><p className="font-semibold">{opp.deadline}</p></div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )) : (
+                <div className="text-center py-10 bg-gray-50 rounded-lg">
+                  <p className="text-gray-500">No has publicado ninguna oferta todavía.</p>
+                  <Button variant="link" onClick={() => setShowCreateOpp(true)}>Publicar la primera</Button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
       <SendProposalDialog
         isOpen={!!selectedOpportunity}
         onClose={() => setSelectedOpportunity(null)}
         opportunity={selectedOpportunity}
         onSuccess={handleSuccessProposal}
+      />
+
+      {/* Interactive Stats Dialogs */}
+      <ProposalsListDialog
+        isOpen={showProposals}
+        onClose={() => setShowProposals(false)}
+        currentUserId={currentUserId}
+      />
+      <ContractsListDialog
+        isOpen={showContracts}
+        onClose={() => setShowContracts(false)}
+        currentUserId={currentUserId}
+      />
+      <CreateOpportunityDialog
+        isOpen={showCreateOpp}
+        onClose={() => setShowCreateOpp(false)}
+        onSuccess={handleSuccessProposal}
+        currentUserId={currentUserId}
       />
     </div>
   );

@@ -321,7 +321,7 @@ export function InsightsSection() {
               <BarChart3 className="h-12 w-12 text-purple-600" />
               <div className="flex-1">
                 <h3 className="font-semibold text-lg mb-1">
-                  Próximamente: ERP AgroLink
+                  Próximamente: ERP CropLink
                 </h3>
                 <p className="text-gray-600 mb-3">
                   Gestiona tu finca con herramientas profesionales de planificación, inventario y análisis financiero

@@ -683,19 +683,69 @@ app.get('/api/buyers', async (req, res) => {
 
 // 10.6 GET OPPORTUNITIES
 app.get('/api/opportunities', async (req, res) => {
+    const userId = req.query.userId;
     try {
-        const [rows] = await pool.query(`
+        let query = `
             SELECT 
-                o.id, o.product_name as product, o.quantity, o.price, o.deadline, o.requirements,
+                o.id, o.product_name as product, o.quantity, o.quality, o.price, o.deadline, o.requirements, o.status,
                 u.name as buyer
             FROM opportunities o
             JOIN users u ON o.user_id = u.id
-            WHERE o.status = 'active'
-        `);
+        `;
+        const params = [];
+
+        // Filter by userId if provided (Mis Ofertas)
+        // Otherwise only ACTIVE (Public Marketplace)
+        if (userId) {
+            query += ` WHERE o.user_id = ? ORDER BY o.created_at DESC`;
+            params.push(userId);
+        } else {
+            query += ` WHERE o.status = 'active' ORDER BY o.created_at DESC`;
+        }
+
+        const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching opportunities:', error);
         res.status(500).json({ message: 'Error obteniendo oportunidades' });
+    }
+});
+
+// 10.6.5 CREATE OPPORTUNITY
+app.post('/api/opportunities', async (req, res) => {
+    const { product, quantity, quality, price, deadline, requirements, userId } = req.body;
+    try {
+        await pool.query(
+            `INSERT INTO opportunities (user_id, product_name, quantity, quality, price, deadline, requirements, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+            [userId, product, quantity, quality, price, deadline, requirements]
+        );
+        res.status(201).json({ message: 'Oportunidad creada' });
+    } catch (error) {
+        console.error('Error creating opportunity:', error);
+        res.status(500).json({ message: 'Error creando oportunidad' });
+    }
+});
+
+// 10.6.6 UPDATE OPPORTUNITY
+app.put('/api/opportunities/:id', async (req, res) => {
+    const { status, product, quantity, quality, price, deadline, requirements } = req.body;
+    const oppId = req.params.id;
+
+    try {
+        // Build update query dynamically
+        if (status) {
+            await pool.query('UPDATE opportunities SET status = ? WHERE id = ?', [status, oppId]);
+        } else {
+            await pool.query(
+                `UPDATE opportunities SET product_name=?, quantity=?, quality=?, price=?, deadline=?, requirements=? WHERE id=?`,
+                [product, quantity, quality, price, deadline, requirements, oppId]
+            );
+        }
+        res.json({ message: 'Oportunidad actualizada' });
+    } catch (error) {
+        console.error('Error updating opportunity:', error);
+        res.status(500).json({ message: 'Error actualizando oportunidad' });
     }
 });
 
@@ -712,8 +762,17 @@ app.get('/api/market/stats', async (req, res) => {
         let contractsCount = 0;
 
         if (userId) {
-            const [proposals] = await pool.query('SELECT COUNT(*) as count FROM proposals WHERE seller_id = ?', [userId]);
-            const [contracts] = await pool.query('SELECT COUNT(*) as count FROM contracts WHERE seller_id = ? AND status="active"', [userId]);
+            // Count Sent (Seller) AND Received (Buyer - via Opportunity ownership)
+            const [proposals] = await pool.query(`
+                SELECT COUNT(*) as count 
+                FROM proposals p
+                LEFT JOIN opportunities o ON p.opportunity_id = o.id
+                WHERE p.seller_id = ? OR o.user_id = ?
+            `, [userId, userId]);
+
+            // Count Contracts (Seller or Buyer)
+            const [contracts] = await pool.query('SELECT COUNT(*) as count FROM contracts WHERE (seller_id = ? OR buyer_id = ?) AND status="active"', [userId, userId]);
+
             proposalsCount = proposals[0].count;
             contractsCount = contracts[0].count;
         }
@@ -768,6 +827,124 @@ app.post('/api/proposals', async (req, res) => {
         console.error('Error creating proposal:', error); // This log is crucial
         console.error('SQL Message:', error.sqlMessage);
         res.status(500).json({ message: 'Error enviando propuesta: ' + error.message }); // Return error to client for visibility
+    }
+});
+
+// 10.9 GET PROPOSALS (Filtered)
+app.get('/api/proposals', async (req, res) => {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ message: 'Missing userId' });
+
+    try {
+        // Fetch proposals where user is seller (sent) OR user is buyer (received via opportunity ownership)
+        const [rows] = await pool.query(`
+            SELECT 
+                p.*,
+                o.product_name, o.user_id as buyer_id,
+                u_seller.name as seller_name,
+                u_buyer.name as buyer_name
+            FROM proposals p
+            JOIN opportunities o ON p.opportunity_id = o.id
+            JOIN users u_seller ON p.seller_id = u_seller.id
+            JOIN users u_buyer ON o.user_id = u_buyer.id
+            WHERE p.seller_id = ? OR o.user_id = ?
+            ORDER BY p.created_at DESC
+        `, [userId, userId]);
+
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting proposals:', error);
+        res.status(500).json({ message: 'Error obteniendo propuestas' });
+    }
+});
+
+// 10.10 UPDATE PROPOSAL STATUS
+app.put('/api/proposals/:id/status', async (req, res) => {
+    const { status, price } = req.body;
+    const proposalId = req.params.id;
+
+    try {
+        // Update Status
+        await pool.query('UPDATE proposals SET status = ? WHERE id = ?', [status, proposalId]);
+
+        // If Accepted, create Contract
+        if (status === 'accepted') {
+            // Fetch proposal details to create contract
+            const [props] = await pool.query('SELECT * FROM proposals WHERE id = ?', [proposalId]);
+            if (props.length > 0) {
+                const p = props[0];
+                // Check if contract already exists
+                const [exists] = await pool.query('SELECT 1 FROM contracts WHERE proposal_id = ?', [proposalId]);
+                if (exists.length === 0) {
+                    await pool.query(`
+                        INSERT INTO contracts (proposal_id, seller_id, buyer_id, price, quantity, status, start_date)
+                        SELECT ?, ?, o.user_id, ?, ?, 'active', NOW()
+                        FROM proposals pr
+                        JOIN opportunities o ON pr.opportunity_id = o.id
+                        WHERE pr.id = ?
+                    `, [proposalId, p.seller_id, p.price, p.quantity_offered, proposalId]);
+                }
+            }
+        }
+
+        res.json({ message: 'Estado actualizado' });
+    } catch (error) {
+        console.error('Error updating proposal:', error);
+        res.status(500).json({ message: 'Error actualizando propuesta' });
+    }
+});
+
+// 10.10.1 COUNTER PROPOSAL
+app.put('/api/proposals/:id/counter', async (req, res) => {
+    const proposalId = req.params.id;
+    const { price, quantity, message } = req.body;
+
+    try {
+        // Update proposal: Set status to 'countered', update price/qty
+        await pool.query(
+            'UPDATE proposals SET price = ?, quantity_offered = ?, status = ? WHERE id = ?',
+            [price, quantity, 'countered', proposalId]
+        );
+
+        // Notify Original Seller (The Producer)
+        const [proposal] = await pool.query('SELECT seller_id FROM proposals WHERE id = ?', [proposalId]);
+        if (proposal.length > 0) {
+            // Ideally we should pass actorId in body but for now we skip strict notification actor check
+            // sendNotification(proposal[0].seller_id, 0, 'proposal_countered', proposalId);
+        }
+
+        res.json({ message: 'Contra-oferta enviada' });
+    } catch (error) {
+        console.error('Error countering proposal:', error);
+        res.status(500).json({ message: 'Error enviando contra-oferta' });
+    }
+});
+
+// 10.11 GET CONTRACTS
+app.get('/api/contracts', async (req, res) => {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ message: 'Missing userId' });
+
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                c.*,
+                u_seller.name as seller_name,
+                u_buyer.name as buyer_name,
+                o.product_name
+            FROM contracts c
+            JOIN proposals p ON c.proposal_id = p.id
+            JOIN opportunities o ON p.opportunity_id = o.id
+            JOIN users u_seller ON c.seller_id = u_seller.id
+            JOIN users u_buyer ON c.buyer_id = u_buyer.id
+            WHERE c.seller_id = ? OR c.buyer_id = ?
+            ORDER BY c.created_at DESC
+        `, [userId, userId]);
+
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting contracts:', error);
+        res.status(500).json({ message: 'Error obteniendo contratos' });
     }
 });
 

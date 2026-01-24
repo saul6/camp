@@ -9,13 +9,13 @@ const dbConfig = {
     database: process.env.DB_NAME || 'agrocore'
 };
 
-async function checkSchema() {
+async function checkContractsSchema() {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.query('DESCRIBE buyer_profiles');
-        console.log("--- BUYER PROFILES ---");
-        console.log(JSON.stringify(rows.map(r => ({ Field: r.Field, Type: r.Type })), null, 2));
+        const [rows] = await connection.query('DESCRIBE contracts');
+        rows.filter(r => ['price', 'quantity'].includes(r.Field)).forEach(r => console.log(`${r.Field}: ${r.Type}`));
+        if (rows.filter(r => ['price', 'quantity'].includes(r.Field)).length === 0) console.log("Missing price/quantity columns!");
     } catch (error) {
         console.error(error);
     } finally {
@@ -23,4 +23,4 @@ async function checkSchema() {
     }
 }
 
-checkSchema();
+checkContractsSchema();

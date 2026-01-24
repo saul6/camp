@@ -80,7 +80,7 @@ export function Sidebar({ activeSection, onSectionChange, isOpen, onClose }: Sid
             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
               <p className="text-sm">
                 <span className="font-semibold text-green-800">Próximamente:</span>
-                <span className="text-gray-700"> ERP AgroLink</span>
+                <span className="text-gray-700"> ERP CropLink</span>
               </p>
             </div>
           </div>

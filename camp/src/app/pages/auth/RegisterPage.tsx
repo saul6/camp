@@ -98,7 +98,7 @@ export function RegisterPage() {
                     <div>
                         <div className="flex items-center gap-2 mb-8">
                             <Sprout className="h-10 w-10 text-green-300" />
-                            <span className="text-3xl font-bold tracking-tight">AgroLink</span>
+                            <span className="text-3xl font-bold tracking-tight">CropLink</span>
                         </div>
                         <h2 className="text-4xl font-bold leading-tight max-w-lg">
                             Conecta tu negocio agrícola con el futuro.
@@ -108,7 +108,7 @@ export function RegisterPage() {
                         </p>
                     </div>
                     <div className="flex gap-4 text-sm text-green-200">
-                        <span>© 2026 AgroLink Inc.</span>
+                        <span>© 2026 CropLink Inc.</span>
                         <a href="#" className="hover:text-white">Privacidad</a>
                         <a href="#" className="hover:text-white">Términos</a>
                     </div>
